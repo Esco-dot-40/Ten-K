@@ -43,3 +43,12 @@ To run this as a Discord Activity:
 1. Create a Discord Application in the [Discord Developer Portal](https://discord.com/developers/applications).
 2. Set the "Interaction Endpoint URL" or enable "Activities".
 3. Use the URL of your deployed web app as the "URL Mapping" for the Activity.
+
+## Troubleshooting
+
+### Cloudflare Captcha / Infinite Loading
+If you use Cloudflare and users get stuck on "Verify you are human":
+1.  Go to **Cloudflare Dashboard > Security > Settings**.
+2.  Set **Security Level** to **Essentially Off**.
+3.  Go to **Security > Bots** and disable **Bot Fight Mode**.
+4.  Discord's embedded browser is often mistaken for a bot; lowering these settings usually fixes it.
