@@ -338,24 +338,7 @@ h1 {
 
 /* Dice States */
 .die.selected {
-    transform: translateY(-20px) rotateX(20deg) !important;
-    /* Force transform to override the face specific one? 
-       No, the face specific one is on the die too. 
-       We need to combine them or ensure specificity. 
-       Wait, if I set transform on .selected, I lose the rotation ensuring the correct face is shown.
-       The rotation logic sets `transform: rotate...`.
-       Class .selected adds `transform: translateY...`.
-       CSS Cascade: If .selected is after, it overrides.
-       I need to KEEP the rotation but add translation.
-       
-       Solution: Apply the translation to a Wrapper or use `transform: translateZ` on the face?
-       Or, in JS, when selected, we apply specific transforms.
-       Or simpler: Visual selection is just border/glow, not movement?
-       Reference says: "Clicking ... update".
-       Moving is nice.
-       I'll rely on the glow/border I defined in style.css earlier.
-       Let's drop the transform override to avoid breaking the face display.
-    */
+    /* transform removed here, handled per face below */
     box-shadow: 0 0 15px var(--primary);
 }
 
@@ -364,26 +347,69 @@ h1 {
     box-shadow: inset 0 0 10px rgba(99, 102, 241, 0.5);
 }
 
+/* Rotations with Selection Lift */
+/* We must explicitly state the transform for selected state to combine the lift + rotation */
+.die[data-face="1"] {
+    transform: rotateX(0deg) rotateY(0deg);
+}
+
+.die.selected[data-face="1"] {
+    transform: translateY(-20px) rotateX(0deg) rotateY(0deg);
+}
+
+.die[data-face="2"] {
+    transform: rotateX(0deg) rotateY(180deg);
+}
+
+.die.selected[data-face="2"] {
+    transform: translateY(-20px) rotateX(0deg) rotateY(180deg);
+}
+
+.die[data-face="3"] {
+    transform: rotateX(0deg) rotateY(-90deg);
+}
+
+.die.selected[data-face="3"] {
+    transform: translateY(-20px) rotateX(0deg) rotateY(-90deg);
+}
+
+.die[data-face="4"] {
+    transform: rotateX(0deg) rotateY(90deg);
+}
+
+.die.selected[data-face="4"] {
+    transform: translateY(-20px) rotateX(0deg) rotateY(90deg);
+}
+
+.die[data-face="5"] {
+    transform: rotateX(-90deg) rotateY(0deg);
+}
+
+.die.selected[data-face="5"] {
+    transform: translateY(-20px) rotateX(-90deg) rotateY(0deg);
+}
+
+.die[data-face="6"] {
+    transform: rotateX(90deg) rotateY(0deg);
+}
+
+.die.selected[data-face="6"] {
+    transform: translateY(-20px) rotateX(90deg) rotateY(0deg);
+}
+
 @keyframes roll-animation {
     0% {
         transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
     }
 
-    25% {
-        transform: rotateX(180deg) rotateY(90deg) rotateZ(45deg);
-    }
-
-    50% {
-        transform: rotateX(360deg) rotateY(180deg) rotateZ(90deg);
-    }
-
-    75% {
-        transform: rotateX(540deg) rotateY(270deg) rotateZ(135deg);
-    }
-
     100% {
         transform: rotateX(720deg) rotateY(360deg) rotateZ(180deg);
     }
+}
+
+/* Random variants for natural look */
+.die[data-face="1"].variant-1 {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(5deg);
 }
 
 .die.banked {
