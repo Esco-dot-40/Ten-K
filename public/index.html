@@ -120,16 +120,15 @@
 
         <div id="setup-modal" class="modal">
             <div class="modal-content">
-                <h2>Join / Create Game</h2>
+                <h2>Join Table</h2>
                 <div class="input-group">
                     <label>Your Name</label>
                     <input type="text" id="player-name-input" value="Player 1" placeholder="Enter name">
                 </div>
-                <div class="input-group">
-                    <label>Room Code</label>
-                    <input type="text" id="room-code-input" value="room1" placeholder="Enter room code">
+                <!-- Room List will be injected here -->
+                <div id="room-list-container" class="room-grid">
+                    <p style="color:var(--text-muted);">Loading tables...</p>
                 </div>
-                <button id="start-game-btn" class="btn primary">Join Game</button>
             </div>
         </div>
 
