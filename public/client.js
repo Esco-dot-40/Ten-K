@@ -181,7 +181,7 @@ class FarkleClient {
         this.ui.rulesBtn.addEventListener('click', () => this.ui.rulesModal.classList.remove('hidden'));
         this.ui.rulesModal.querySelector('.close-modal').addEventListener('click', () => this.ui.rulesModal.classList.add('hidden'));
 
-        this.ui.startGameBtn.addEventListener('click', () => this.joinGame());
+        // this.ui.startGameBtn.addEventListener('click', () => this.joinGame());
 
         this.ui.restartBtn.addEventListener('click', () => {
             this.socket.emit('restart', { roomCode: this.roomCode });
