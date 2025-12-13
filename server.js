@@ -228,6 +228,10 @@ io.on('connection', (socket) => {
     // Send initial room list
     socket.emit('room_list', getRoomList());
 
+    socket.on('get_room_list', () => {
+        socket.emit('room_list', getRoomList());
+    });
+
     socket.on('join_game', ({ roomCode, playerName }) => {
         let game = games.get(roomCode);
 

@@ -183,11 +183,25 @@ class FarkleClient {
     initSocketEvents() {
         this.socket.on('connect', () => {
             console.log('Connected to server with ID:', this.socket.id);
+            this.showFeedback("Connected!", "success");
+
+            // Explicitly request room list to avoid race conditions
+            this.socket.emit('get_room_list');
+
             if (this.roomCode && this.playerName) {
                 console.log('Attempting auto-rejoin...');
                 this.socket.emit('join_game', { roomCode: this.roomCode, playerName: this.playerName });
                 this.showFeedback("Reconnecting...", "info");
             }
+        });
+
+        this.socket.on('connect_error', (err) => {
+            console.error("Socket Connection Error:", err);
+            const container = document.getElementById('room-list-container');
+            if (container && container.innerText.includes('Loading')) {
+                container.innerHTML = `<p style="color:var(--danger)">Connection Failed. <button class="btn secondary" onclick="location.reload()">Retry</button></p>`;
+            }
+            this.showFeedback("Connection Error!", "error");
         });
 
         this.socket.on('room_list', (rooms) => {
