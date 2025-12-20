@@ -170,7 +170,12 @@ class GameState {
     }
 
     nextTurn() {
-        this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+        let attempts = 0;
+        do {
+            this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+            attempts++;
+        } while (!this.players[this.currentPlayerIndex].connected && attempts < this.players.length);
+
         this.resetRound();
 
         if (this.isFinalRound) {
@@ -242,45 +247,28 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Reconnect logic or new player
+        // Check if player already exists by Name
         let existingPlayer = game.players.find(p => p.name === playerName);
 
-        // Check for takeover of disconnected player
-        if (!existingPlayer && game.players.length >= 5) {
-            const disconnectedPlayer = game.players.find(p => !p.connected);
-            if (disconnectedPlayer) {
-                disconnectedPlayer.id = socket.id;
-                disconnectedPlayer.name = playerName;
-                disconnectedPlayer.connected = true;
-                disconnectedPlayer.score = 0;
-                existingPlayer = disconnectedPlayer;
-            }
-        }
-
-        if (game.players.length >= 5 && !existingPlayer) {
-            socket.emit('error', 'Room Full');
-            return;
-        }
-
         if (existingPlayer) {
-            existingPlayer.id = socket.id;
+            // Reconnect logic
+            console.log(`[Game ${roomCode}] Player ${playerName} reconnected.`);
+            existingPlayer.id = socket.id; // Update socket ID
             existingPlayer.connected = true;
         } else {
-            // New player
-            if (!game.addPlayer(socket.id, playerName)) {
+            // New Player
+            if (game.players.length >= 5) {
+                // Check if we can take over a disconnected spot (optional, but 'Room Full' is safer)
                 socket.emit('error', 'Room Full');
                 return;
             }
+            game.addPlayer(socket.id, playerName);
         }
 
         socket.join(roomCode);
         socket.emit('joined', { playerId: socket.id, state: game.getState() });
         io.to(roomCode).emit('game_state_update', game.getState());
-
-        // Broadcast updated room list to everyone in lobby
         io.emit('room_list', getRoomList());
-
-        // No auto-start
     });
 
     socket.on('start_game', ({ roomCode }) => {
@@ -300,6 +288,16 @@ io.on('connection', (socket) => {
                 if (game.gameStatus === 'waiting') {
                     game.players = game.players.filter(pl => pl.id !== socket.id);
                 }
+
+                // Auto-Reset if empty
+                const activeCount = game.players.filter(p => p.connected).length;
+                if (activeCount === 0) {
+                    console.log(`[Game ${game.roomCode}] Resetting empty room.`);
+                    game.players = [];
+                    game.gameStatus = 'waiting';
+                    game.resetRound();
+                }
+
                 socket.leave(game.roomCode);
                 io.emit('room_list', getRoomList());
                 io.to(game.roomCode).emit('game_state_update', game.getState());
@@ -391,14 +389,14 @@ io.on('connection', (socket) => {
             // Let's do a Full Game Restart (Scores 0) but keep the room populated.
             // The existing 'restart' already does this but only if 'finished'.
             // This debug one will force it anytime.
-            
+
             game.gameStatus = 'playing';
             game.players.forEach(p => p.score = 0);
             game.currentPlayerIndex = 0;
             game.resetRound();
             game.isFinalRound = false;
             game.winner = null;
-            
+
             io.to(roomCode).emit('game_start', game.getState());
         }
     });
@@ -409,6 +407,16 @@ io.on('connection', (socket) => {
             const player = game.players.find(p => p.id === socket.id);
             if (player) {
                 player.connected = false;
+
+                // Auto-Reset if empty
+                const activeCount = game.players.filter(p => p.connected).length;
+                if (activeCount === 0) {
+                    console.log(`[Game ${game.roomCode}] Resetting empty room.`);
+                    game.players = [];
+                    game.gameStatus = 'waiting';
+                    game.resetRound();
+                }
+
                 io.emit('room_list', getRoomList());
 
                 if (game.gameStatus === 'waiting') {
