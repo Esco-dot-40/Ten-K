@@ -1,52 +1,152 @@
-import { calculateScore } from './rules.js';
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+// Game Rules (Merged from rules.js to avoid module resolution issues)
+const SCORING_RULES = {
+    TRIPLE_1: 1000,
+    TRIPLE_2: 200,
+    TRIPLE_3: 300,
+    TRIPLE_4: 400,
+    TRIPLE_5: 500,
+    TRIPLE_6: 600,
+    SINGLE_1: 100,
+    SINGLE_5: 50
+};
 
+function calculateScore(dice) {
+    if (!dice || dice.length === 0) return 0;
+    const counts = {};
+    for (const die of dice) counts[die] = (counts[die] || 0) + 1;
+    let score = 0;
+    for (let face = 1; face <= 6; face++) {
+        const count = counts[face] || 0;
+        let tripleValue = 0;
+        if (face === 1) tripleValue = SCORING_RULES.TRIPLE_1;
+        else if (face === 2) tripleValue = SCORING_RULES.TRIPLE_2;
+        else if (face === 3) tripleValue = SCORING_RULES.TRIPLE_3;
+        else if (face === 4) tripleValue = SCORING_RULES.TRIPLE_4;
+        else if (face === 5) tripleValue = SCORING_RULES.TRIPLE_5;
+        else if (face === 6) tripleValue = SCORING_RULES.TRIPLE_6;
+        if (count >= 3) {
+            let multiplier = 0;
+            if (count === 3) multiplier = 1;
+            else if (count === 4) multiplier = 2;
+            else if (count === 5) multiplier = 3;
+            else if (count === 6) multiplier = 4;
+            score += tripleValue * multiplier;
+        } else {
+            if (face === 1) score += count * SCORING_RULES.SINGLE_1;
+            if (face === 5) score += count * SCORING_RULES.SINGLE_5;
+        }
+    }
+    return score;
+}
+
+// Global reference for Discord SDK (dynamically imported)
+let DiscordSDK = null;
 const DISCORD_CLIENT_ID = '1317075677927768074'; // Real Client ID
+
+console.log("Farkle Client Execution Started");
 
 class FarkleClient {
     constructor() {
-        this.socket = io();
-        this.roomCode = null;
-        this.playerId = null;
-        this.gameState = null;
-        this.discordSdk = null;
+        console.log("FarkleClient constructor start");
 
-        // UI Elements
-
-        // UI Elements
-        this.ui = {
-            app: document.getElementById('app'),
-            diceContainer: document.getElementById('dice-container'),
-            rollBtn: document.getElementById('roll-btn'),
-            bankBtn: document.getElementById('bank-btn'),
-            playerZonesContainer: document.getElementById('player-zones-container'),
-            actionText: document.getElementById('action-text'),
-            currentScoreDisplay: document.getElementById('current-score-display'),
-            feedback: document.getElementById('feedback-message'),
-            rulesBtn: document.getElementById('rules-btn'),
-            rulesModal: document.getElementById('rules-modal'),
-            setupModal: document.getElementById('setup-modal'),
-            gameOverModal: document.getElementById('game-over-modal'),
-            startGameBtn: document.getElementById('start-game-btn'),
-            playerNameInput: document.getElementById('player-name-input'),
-            roomCodeInput: document.getElementById('room-code-input'),
-            winnerText: document.getElementById('winner-text'),
-            endP1Name: document.getElementById('end-p1-name'),
-            endP1Score: document.getElementById('end-p1-score'),
-            endP2Name: document.getElementById('end-p2-name'),
-            endP2Score: document.getElementById('end-p2-score'),
-            restartBtn: document.getElementById('restart-btn'),
-            settingsBtn: document.getElementById('settings-btn'),
-            settingsModal: document.getElementById('settings-modal'),
-            diceThemeSelect: document.getElementById('dice-theme-select'),
-            themeBtns: document.querySelectorAll('.theme-btn')
+        // Immediate UI feedback
+        const loadingContainer = document.getElementById('room-list-container');
+        if (loadingContainer) {
+            loadingContainer.innerHTML = `
+                <p style="color:var(--primary);">Script Running...</p>
+                <p style="color:var(--text-muted); font-size: 0.8rem;">Connecting to server...</p>
+            `;
+        }
+        // Global error handler for this instance
+        window.onerror = (msg, url, line) => {
+            this.debugLog(`JS Error: ${msg} at ${line}`);
+            return false;
         };
 
-        this.initListeners();
-        this.initSettings();
-        this.initBackgroundDice();
-        this.initDiscord(); // Try to init Discord
-        this.initSocketEvents();
+        try {
+            this.roomCode = null;
+            this.playerId = null;
+            this.gameState = null;
+            this.discordSdk = null;
+            this.playerName = null;
+
+            // UI Elements
+            this.ui = {
+                app: document.getElementById('app'),
+                diceContainer: document.getElementById('dice-container'),
+                rollBtn: document.getElementById('roll-btn'),
+                bankBtn: document.getElementById('bank-btn'),
+                playerZonesContainer: document.getElementById('player-zones-container'),
+                actionText: document.getElementById('action-text'),
+                currentScoreDisplay: document.getElementById('current-score-display'),
+                feedback: document.getElementById('feedback-message'),
+                rulesBtn: document.getElementById('rules-btn'),
+                rulesModal: document.getElementById('rules-modal'),
+                setupModal: document.getElementById('setup-modal'),
+                gameOverModal: document.getElementById('game-over-modal'),
+                playerNameInput: document.getElementById('player-name-input'),
+                winnerText: document.getElementById('winner-text'),
+                endP1Name: document.getElementById('end-p1-name'),
+                endP1Score: document.getElementById('end-p1-score'),
+                endP2Name: document.getElementById('end-p2-name'),
+                endP2Score: document.getElementById('end-p2-score'),
+                restartBtn: document.getElementById('restart-btn'),
+                settingsBtn: document.getElementById('settings-btn'),
+                settingsModal: document.getElementById('settings-modal'),
+                diceThemeSelect: document.getElementById('dice-theme-select'),
+                themeBtns: document.querySelectorAll('.theme-btn')
+            };
+
+            this.debugLog("UI Elements mapped");
+
+            this.initListeners();
+            this.initSettings();
+            this.initBackgroundDice();
+
+            this.debugLog("Internal modules inited");
+
+            this.initDiscord().catch(err => {
+                this.debugLog(`Discord Init Error: ${err.message}`);
+            });
+
+            if (typeof io === 'undefined') {
+                this.debugLog("CRITICAL: Socket.io (io) is not defined!");
+                return;
+            }
+
+            // Initialize socket and events carefully
+            this.debugLog("Connecting to server...");
+            this.socket = io({
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000,
+                autoConnect: false,
+                transports: ['websocket', 'polling'] // Try both
+            });
+
+            this.initSocketEvents();
+            this.socket.connect();
+            this.debugLog("Socket connect() called");
+
+        } catch (err) {
+            console.error("Init Error:", err);
+            this.debugLog(`Init Failed: ${err.message}`);
+        }
+    }
+
+    debugLog(msg) {
+        console.log(`[Debug] ${msg}`);
+        const container = document.getElementById('room-list-container');
+        if (container) {
+            const status = container.querySelector('.connection-status') || document.createElement('div');
+            if (!status.classList.contains('connection-status')) {
+                status.className = 'connection-status';
+                status.style.fontSize = '0.75rem';
+                status.style.color = 'var(--text-muted)';
+                status.style.marginTop = '10px';
+                container.appendChild(status);
+            }
+            status.textContent = `Status: ${msg}`;
+        }
     }
 
     initSettings() {
@@ -110,18 +210,23 @@ class FarkleClient {
 
     async initDiscord() {
         try {
-            // Note: This requires the valid Client ID to be set in DISCORD_CLIENT_ID
+            this.debugLog("Discord SDK: Loading...");
+            const module = await import("@discord/embedded-app-sdk");
+            DiscordSDK = module.DiscordSDK;
+
             this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
-            await this.discordSdk.ready();
+
+            // Timeout for ready check
+            const readyPromise = this.discordSdk.ready();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SDK Timeout")), 5000));
+
+            await Promise.race([readyPromise, timeoutPromise]);
+
+            this.debugLog("Discord SDK: Ready!");
             console.log("Discord SDK Ready");
-
-            // Authenticate purely for retrieving user info if needed, but for RP we might need scope
-            // For now, we just log readiness. Implementing full OAuth requires backend handshake.
-
-            // Example activity update (mocked as it might fail without auth)
-            // this.updateDiscordPresence("In Menu");
         } catch (e) {
-            console.log("Discord SDK Init skipped/failed (expected locally):", e);
+            this.debugLog(`Discord SDK: ${e.message} (Skipped)`);
+            console.warn("Discord SDK Init failed (expected locally):", e);
         }
     }
 
@@ -182,7 +287,7 @@ class FarkleClient {
 
     initSocketEvents() {
         this.socket.on('connect', () => {
-            console.log('Connected to server with ID:', this.socket.id);
+            this.debugLog(`Connected! ID: ${this.socket.id}`);
             this.showFeedback("Connected!", "success");
 
             // Explicitly request room list to avoid race conditions
@@ -196,6 +301,7 @@ class FarkleClient {
         });
 
         this.socket.on('connect_error', (err) => {
+            this.debugLog(`Connection Error: ${err.message}`);
             console.error("Socket Connection Error:", err);
             const container = document.getElementById('room-list-container');
             if (container && container.innerText.includes('Loading')) {
@@ -205,10 +311,12 @@ class FarkleClient {
         });
 
         this.socket.on('room_list', (rooms) => {
+            this.debugLog(`Received ${rooms.length} tables`);
             this.renderRoomList(rooms);
         });
 
-        this.socket.on('disconnect', () => {
+        this.socket.on('disconnect', (reason) => {
+            this.debugLog(`Disconnected: ${reason}`);
             console.log('Disconnected from server');
             this.showFeedback("Connection Lost! Reconnecting...", "error");
         });
@@ -253,6 +361,11 @@ class FarkleClient {
     }
 
     renderRoomList(rooms) {
+        if (!Array.isArray(rooms)) {
+            this.debugLog(`Error: Invalid room list data received`);
+            return;
+        }
+
         // Find container in setup modal
         let container = document.getElementById('room-list-container');
         if (!container) {
@@ -280,8 +393,11 @@ class FarkleClient {
             container.id = 'room-list-container';
             container.className = 'room-grid';
             parent.appendChild(container);
+        }
 
-            // Re-order inputs if needed, but append is fine. Name input is first.
+        if (rooms.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); padding: 2rem; text-align: center;">No rooms available. Please wait...</p>';
+            return;
         }
 
         container.innerHTML = '';
@@ -574,6 +690,7 @@ class FarkleClient {
     }
 
     showFeedback(text, type = "info") {
+        if (!this.ui.feedback) return;
         this.ui.feedback.textContent = text;
         this.ui.feedback.classList.remove('hidden');
         setTimeout(() => {
@@ -582,6 +699,5 @@ class FarkleClient {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    new FarkleClient();
-});
+// Instantiate immediately since we are a module script (loaded after parsing)
+window.farkle = new FarkleClient();

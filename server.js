@@ -229,7 +229,9 @@ io.on('connection', (socket) => {
     socket.emit('room_list', getRoomList());
 
     socket.on('get_room_list', () => {
-        socket.emit('room_list', getRoomList());
+        const rooms = getRoomList();
+        console.log(`[Server] Room list requested by ${socket.id}. Sending ${rooms.length} rooms.`);
+        socket.emit('room_list', rooms);
     });
 
     socket.on('join_game', ({ roomCode, playerName }) => {
