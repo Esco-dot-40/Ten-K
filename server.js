@@ -365,10 +365,18 @@ io.on('connection', (socket) => {
             });
 
             if (result.farkle) {
+                console.log(`[Game ${roomCode}] Farkle detected for ${socket.id}. Advancing turn in 3s...`);
                 setTimeout(() => {
-                    game.farkle();
-                    io.to(roomCode).emit('game_state_update', game.getState());
-                }, 2000);
+                    try {
+                        console.log(`[Game ${roomCode}] Executing Farkle logic (next turn)...`);
+                        game.farkle();
+                        const newState = game.getState();
+                        console.log(`[Game ${roomCode}] Turn advanced to Index ${newState.currentPlayerIndex}`);
+                        io.to(roomCode).emit('game_state_update', newState);
+                    } catch (err) {
+                        console.error(`[Game ${roomCode}] Error processing Farkle:`, err);
+                    }
+                }, 3000); // 3s allows animation to comfortably finish mostly
             }
         }
     });
