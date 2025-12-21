@@ -241,10 +241,22 @@ io.on('connection', (socket) => {
 
     socket.on('join_game', (data) => {
         const requestedRoom = data?.roomCode;
-        let roomCode = requestedRoom && ROOM_NAMES.includes(requestedRoom) ? requestedRoom : ROOM_NAMES[0];
+        let roomCode = requestedRoom && games.has(requestedRoom) ? requestedRoom : ROOM_NAMES[0];
         let game = games.get(roomCode);
 
-        // 1. Try to find a disconnected slot to reclaim
+        console.log(`[Server] Socket ${socket.id} joining ${roomCode}`);
+
+        // 1. Try to find a disconnected slot with this socket ID (for quick reconnects)
+        let existingPlayer = game.players.find(p => p.id === socket.id);
+        if (existingPlayer) {
+            existingPlayer.connected = true;
+            socket.join(roomCode);
+            socket.emit('joined', { playerId: socket.id, state: game.getState() });
+            io.to(roomCode).emit('game_state_update', game.getState());
+            return;
+        }
+
+        // 2. Try to find any disconnected slot to reclaim
         let disconnectedPlayer = game.players.find(p => !p.connected);
         if (disconnectedPlayer) {
             console.log(`[Server] Reclaiming ${disconnectedPlayer.name} in ${roomCode} for ${socket.id}`);
@@ -258,7 +270,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // 2. Otherwise, assign first available Player X name (1-10)
+        // 3. New Player assignment
         let name;
         for (let i = 1; i <= 10; i++) {
             let candidate = `Player ${i}`;
@@ -278,6 +290,7 @@ io.on('connection', (socket) => {
 
         socket.join(roomCode);
         socket.emit('joined', { playerId: socket.id, state: game.getState() });
+        // Immediate broadcast to room so others see the new player
         io.to(roomCode).emit('game_state_update', game.getState());
         io.emit('room_list', getRoomList());
     });
