@@ -417,23 +417,32 @@ class FarkleClient {
     initListeners() {
         this.ui.rollBtn.addEventListener('click', () => {
             if (this.canInteract()) {
-                this.socket.emit('roll', { roomCode: this.roomCode });
+                // Send what the user SEES as selected to prevent lag issues
+                const selectedIds = Array.from(document.querySelectorAll('.die.selected'))
+                    .map(el => el.dataset.id)
+                    .filter(id => id); // remove null/undefined
+
+                this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: selectedIds });
             }
         });
 
         this.ui.bankBtn.addEventListener('click', () => {
             if (this.canInteract()) {
-                this.socket.emit('bank', { roomCode: this.roomCode });
+                const selectedIds = Array.from(document.querySelectorAll('.die.selected'))
+                    .map(el => el.dataset.id)
+                    .filter(id => id);
+                this.socket.emit('bank', { roomCode: this.roomCode, confirmedSelections: selectedIds });
             }
         });
 
         this.ui.diceContainer.addEventListener('click', (e) => {
             const dieEl = e.target.closest('.die');
             if (dieEl && this.canInteract()) {
-                const id = dieEl.dataset.id; // ID is string in dataset
-                // Optimistic toggle? No, server is fast enough usually, or toggle locally and wait for correction?
-                // Let's toggle locally for responsiveness, then sync.
-                // Actually server is simple enough to just emit.
+                const id = dieEl.dataset.id;
+
+                // Optimistic UI Toggle
+                dieEl.classList.toggle('selected');
+
                 this.socket.emit('toggle_die', { roomCode: this.roomCode, dieId: id });
             }
         });

@@ -136,6 +136,19 @@ class GameState {
         return true;
     }
 
+    syncSelections(playerId, selectedIds) {
+        if (this.gameStatus !== 'playing') return;
+        if (this.getCurrentPlayer().id !== playerId) return;
+
+        const setIds = new Set(selectedIds.map(String));
+        this.currentDice.forEach(die => {
+            // Only update selection if it's currently available to select
+            // (Actually server is truth, but client is telling us intent)
+            // We just blindly set selected state based on ID match
+            die.selected = setIds.has(String(die.id));
+        });
+    }
+
     bank(playerId) {
         if (this.gameStatus !== 'playing') return;
         if (this.getCurrentPlayer().id !== playerId) return;
@@ -349,9 +362,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('roll', ({ roomCode }) => {
+    socket.on('roll', ({ roomCode, confirmedSelections }) => {
         const game = games.get(roomCode);
         if (!game) return;
+
+        // Robustness: Sync server state to user's view (if valid)
+        if (confirmedSelections && Array.isArray(confirmedSelections)) {
+            game.syncSelections(socket.id, confirmedSelections);
+        }
 
         const result = game.roll(socket.id);
         if (result.error) {
@@ -389,9 +407,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('bank', ({ roomCode }) => {
+    socket.on('bank', ({ roomCode, confirmedSelections }) => {
         const game = games.get(roomCode);
         if (game) {
+            if (confirmedSelections && Array.isArray(confirmedSelections)) {
+                game.syncSelections(socket.id, confirmedSelections);
+            }
+
             const res = game.bank(socket.id);
             if (res && res.error) {
                 socket.emit('error', res.error);
