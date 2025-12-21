@@ -9,16 +9,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
         {
             "imports": {
-                "@discord/embedded-app-sdk": "https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.5.0/+esm",
-                "three": "https://esm.sh/three@0.160.0",
-                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
-                "cannon-es": "https://esm.sh/cannon-es@0.20.0",
-                "gsap": "https://cdn.skypack.dev/gsap",
-                "gsap/ScrollTrigger": "https://cdn.skypack.dev/gsap/ScrollTrigger",
-                "gsap/MotionPathPlugin": "https://cdn.skypack.dev/gsap/MotionPathPlugin"
+                "@discord/embedded-app-sdk": "/libs/@discord/embedded-app-sdk/output/index.mjs",
+                "three": "/libs/three/build/three.module.js",
+                "three/addons/": "/libs/three/examples/jsm/",
+                "cannon-es": "/libs/cannon-es/dist/cannon-es.js",
+                "gsap": "/libs/gsap/index.js",
+                "gsap/ScrollTrigger": "/libs/gsap/ScrollTrigger.js",
+                "gsap/MotionPathPlugin": "/libs/gsap/MotionPathPlugin.js"
             }
         }
     </script>
@@ -314,7 +315,6 @@
         </defs>
     </svg>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script type="module" src="client.js"></script>
 </body>
 

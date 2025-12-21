@@ -22,6 +22,7 @@ const io = new Server(httpServer, {
 
 // Serve static files
 app.use(express.static(join(__dirname, 'public')));
+app.use('/libs', express.static(join(__dirname, 'node_modules')));
 
 class GameState {
     constructor(roomCode) {
