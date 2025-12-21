@@ -143,14 +143,14 @@ class FarkleClient {
             this.debugLog("UI Elements mapped");
 
             this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer);
-            this.initListeners();
-            this.initSettings();
-            this.initGSAPBackground();
+            try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
+            try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
+            try { this.initGSAPBackground(); } catch (e) { console.error("GSAP Init Failed", e); }
 
-            this.debugLog("Internal modules inited");
+            this.debugLog("Modules initialized");
 
             this.initDiscord().catch(err => {
-                this.debugLog(`Discord Init Error: ${err.message}`);
+                this.debugLog(`Discord Init Catch: ${err.message}`);
             });
 
             if (typeof io === 'undefined') {
@@ -264,10 +264,13 @@ class FarkleClient {
             const path = svg.querySelector(".mPath");
             if (!path) return;
             for (let i = 0; i < numT; i++) {
-                let newTree;
-                if (scale <= 0.15) newTree = t2.cloneNode(true);
-                else if (scale <= 0.3) newTree = t1.cloneNode(true);
-                else newTree = t0.cloneNode(true);
+                let treeSource = null;
+                if (scale <= 0.15) treeSource = t2;
+                else if (scale <= 0.3) treeSource = t1;
+                else treeSource = t0;
+
+                if (!treeSource) continue;
+                let newTree = treeSource.cloneNode(true);
 
                 newTree.id = svg.id + "tb" + i;
                 svg.appendChild(newTree);
@@ -341,27 +344,31 @@ class FarkleClient {
 
     async initDiscord() {
         try {
+            this.debugLog("Discord SDK: Loading...");
             const module = await import("@discord/embedded-app-sdk");
             DiscordSDK = module.DiscordSDK;
 
             this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
-            await this.discordSdk.ready();
+
+            // Timeout after 3 seconds if ready() or authenticate() hangs
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+
+            await Promise.race([this.discordSdk.ready(), timeout]);
             this.debugLog("Discord SDK: Ready!");
 
-            // Authenticate
-            const auth = await this.discordSdk.commands.authenticate();
+            const auth = await Promise.race([this.discordSdk.commands.authenticate(), timeout]);
             if (auth && auth.user) {
                 this.playerName = auth.user.global_name || auth.user.username;
                 this.debugLog(`Authenticated as ${this.playerName}`);
-
                 if (this.ui.playerNameDisplay) {
                     this.ui.playerNameDisplay.textContent = `Playing as: ${this.playerName}`;
                 }
             }
         } catch (e) {
-            this.debugLog(`Discord SDK: ${e.message} (Skipped)`);
-            console.warn("Discord SDK Init failed (expected locally):", e);
-            // Fallback for local testing
+            this.debugLog(`Discord: ${e.message}. Using fallback.`);
+            console.warn("Discord SDK Init failed or timed out:", e);
+
+            // Fallback for local testing or timeout
             this.playerName = `Player ${Math.floor(Math.random() * 1000)}`;
             if (this.ui.playerNameDisplay) {
                 this.ui.playerNameDisplay.textContent = `Testing as: ${this.playerName}`;
