@@ -293,6 +293,13 @@ io.on('connection', (socket) => {
         // Immediate broadcast to room so others see the new player
         io.to(roomCode).emit('game_state_update', game.getState());
         io.emit('room_list', getRoomList());
+
+        // Auto-Start if we have enough players and game is waiting
+        if (game.gameStatus === 'waiting' && game.players.length >= 2) {
+            console.log(`[Game ${roomCode}] Auto-starting with ${game.players.length} players.`);
+            game.start();
+            io.to(roomCode).emit('game_start', game.getState());
+        }
     });
 
     socket.on('start_game', ({ roomCode }) => {
