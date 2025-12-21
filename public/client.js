@@ -4,7 +4,7 @@ import * as CANNON from "cannon-es";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
-import chroma from "https://cdn.jsdelivr.net/npm/chroma-js@3.1.2/+esm";
+import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 
 gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
@@ -312,19 +312,61 @@ class FarkleClient {
         gsap.timeline({
             repeat: -1, yoyo: true, defaults: { duration: 10, ease: 'none' },
             onUpdate() {
-                const auroraColor1 = bodyStyle.getPropertyValue('--auroraColor1');
-                const bg = chroma("#FFFFFF").mix(auroraColor1, 0.4);
-                const bgColor = chroma(bg).mix("#000000", 0.7);
+                const hexToRgb = (hex) => {
+                    let c = hex.substring(1).split('');
+                    if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+                    c = '0x' + c.join('');
+                    return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+                };
+
+                const mix = (c1, c2, weight) => {
+                    const r1 = c1[0], g1 = c1[1], b1 = c1[2];
+                    const r2 = c2[0], g2 = c2[1], b2 = c2[2];
+                    const w = 2 * weight - 1;
+                    const a = 0;
+                    const w1 = ((w * a === -1) ? w : (w + a) / (1 + w * a)) + 1;
+                    const w2 = 1 - w1;
+                    return [
+                        Math.round((r1 * w1 + r2 * w2) / 2),
+                        Math.round((g1 * w1 + g2 * w2) / 2),
+                        Math.round((b1 * w1 + b2 * w2) / 2)
+                    ];
+                };
+
+                const rgbToString = (rgb) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+                const rgbToRgbaString = (rgb, alpha = 1) => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+
+                // Helper to parse "rgb(r, g, b)"
+                const parseRgb = (str) => {
+                    const m = str.match(/\d+/g);
+                    return m ? m.map(Number) : [0, 0, 0];
+                };
+
+                const auroraColor1 = bodyStyle.getPropertyValue('--auroraColor1') || "rgb(0,0,0)";
+                const ac1 = parseRgb(auroraColor1);
+
+                const white = [255, 255, 255];
+                const black = [0, 0, 0];
+
+                const bg = mix(white, ac1, 0.4);
+                const bgColor = mix(bg, black, 0.7);
+
                 const colors = {
-                    "--bg": bg, "--bgColor": bgColor,
-                    "--bgColor90": bgColor.mix("#000000", 0.1), "--bgColor80": bgColor.mix("#000000", 0.2),
-                    "--bgColor70": bgColor.mix("#000000", 0.3), "--bgColor60": bgColor.mix("#000000", 0.4),
-                    "--bgColor50": bgColor.mix("#000000", 0.5), "--bgColor110": bgColor.mix("#FFFFFF", 0.1),
-                    "--bgColor120": bgColor.mix("#FFFFFF", 0.2), "--bgColor130": bgColor.mix("#FFFFFF", 0.3),
-                    "--bgColor140": bgColor.mix("#FFFFFF", 0.4), "--bgColor150": bgColor.mix("#FFFFFF", 0.5)
+                    "--bg": rgbToString(bg),
+                    "--bgColor": rgbToString(bgColor),
+                    "--bgColor90": rgbToString(mix(bgColor, black, 0.1)),
+                    "--bgColor80": rgbToString(mix(bgColor, black, 0.2)),
+                    "--bgColor70": rgbToString(mix(bgColor, black, 0.3)),
+                    "--bgColor60": rgbToString(mix(bgColor, black, 0.4)),
+                    "--bgColor50": rgbToString(mix(bgColor, black, 0.5)),
+                    "--bgColor110": rgbToString(mix(bgColor, white, 0.1)),
+                    "--bgColor120": rgbToString(mix(bgColor, white, 0.2)),
+                    "--bgColor130": rgbToString(mix(bgColor, white, 0.3)),
+                    "--bgColor140": rgbToString(mix(bgColor, white, 0.4)),
+                    "--bgColor150": rgbToString(mix(bgColor, white, 0.5))
                 };
                 const update = {};
-                for (let k in colors) update[k] = `rgba(${colors[k].rgba()})`;
+                for (let k in colors) update[k] = colors[k];
                 gsap.set("body", update);
             }
         })
