@@ -26,59 +26,7 @@
 </head>
 
 <body>
-    <div id="gsapWrapper">
-        <div id="moonWrapper">
-            <div id="moonCenter">
-                <div id="moon">
-                    <svg id="background" version="1.1" viewBox="0 0 250 250" xml:space="preserve"
-                        xmlns="http://www.w3.org/2000/svg">
-                        <path fill="url(#rGradient)" stroke="none" filter="url(#dither)"
-                            d="M 250,125 A 125,125 0 0 1 125,250 125,125 0 0 1 0,125 125,125 0 0 1 125,0 125,125 0 0 1 250,125 Z" />
-                    </svg>
-                </div>
-            </div>
-        </div>
 
-        <div id="gsapBody">
-            <div class="svgWrapper"><svg id="svg6" viewBox="0 0 1200 800">
-                    <path id="land6" class="mPath"
-                        d="m -600,503 c 0,0 289,-188 561,-186 236,2 382,144 581,152 194,7 331,-406 792,-387 167,7 492,181 784,322" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg5" viewBox="0 0 1200 800">
-                    <path id="land5" class="mPath"
-                        d="m -600,562 c 0,0 558,-455 845,-420 223,27 439,327 667,328 138,1 222,-240 408,-242 230,-3 337,176 501,194" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg4" viewBox="0 0 1200 800">
-                    <path id="land4" class="mPath"
-                        d="m -600,483 c 0,0 317,-378 572,-367 315,13 346,282 558,283 171,1 273,-124 489,-132 C 1420,251 1560,497 1711,492" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg3" viewBox="0 0 1200 800">
-                    <path id="land3" class="mPath"
-                        d="m -600,410 c 208,-6 410,-155 634,-151 395,8 501,149 696,142 339,-12 333,-33 609,-28 175,3 305,43 461,37" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg2" viewBox="0 0 1200 800">
-                    <path id="land2" class="mPath"
-                        d="m -594,800 c 180,-376 469,-301 1431,-314 572,-8 868,376 904,381 l 59,9" />
-                </svg></div>
-            <div id="svg2IglooWrapper" class="svgWrapper"></div>
-            <div class="svgWrapper"><svg id="svg2b" viewBox="0 0 1200 800">
-                    <path id="land2b" class="mPath" d="m -597,740 c 15,-29 19,-59 70,-88 h 2269 c 38,29 60,59 59,88" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg1" viewBox="0 0 1200 800">
-                    <path id="land1" class="mPath" d="m -600,810 c 271,-46 127,-217 793,-193 232,8 1203,212 1607,272" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg2d" viewBox="0 0 1200 800">
-                    <path id="land2d" class="mPath" d="m -597,822 c 36,-32 43,-28 70,-44 h 2269 c 37,18 41,15 59,44" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg0" viewBox="0 0 1200 800">
-                    <path id="land0" class="mPath"
-                        d="m -600,756 c 0,0 397,-95 600,-81 221,17 342,111 539,106 230,-5 478,-79 638,-78 155,2 623,78 623,78" />
-                </svg></div>
-            <div class="svgWrapper"><svg id="svg00" viewBox="0 0 1200 800">
-                    <path id="land00" class="mPath" d="M 0,790 H 1200" />
-                </svg></div>
-        </div>
-    </div>
 
     <div id="app">
         <div id="bg-dice-container"></div>
@@ -232,88 +180,7 @@
         </p>
     </footer>
 
-    <svg id="svg2Igloo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" style="display:none">
-        <defs>
-            <path id="land2Igloo" fill="none" stroke="none"
-                d="m -594,800 c 180,-376 469,-301 1431,-314 572,-8 868,376 904,381 l 59,9" />
-            <path id="iglooBodyPath"
-                d="M 110,178 C 12,308 0,472 23,511 c 51,74 383,78 443,78 69,0 387,-3 434,-80 C 924,472 912,315 823,187 719,38 579,8 475,8 356,5 211,35 110,178 Z" />
-            <mask id="iglooOuterDoorMask" mask-type="luminance">
-                <use href="#iglooBodyPath" fill="#FFFFFF" stroke="none" />
-                <path id="iglooDoor" fill="#000000" stroke="none"
-                    d="m 490,589 c 122,-17 104,-177 104,-264 -70,-2 -139,-2 -208,2 0,86 -18,246 104,262 z" />
-            </mask>
-        </defs>
-        <g id="iglooUse2">
-            <g id="iglooInner">
-                <use href="#iglooBodyPath" fill="url(#iglooFire)" />
-                <use id="iglooWhiteFadeWallsPath" href="#iglooBodyPath" fill="url(#iglooWhiteFadeWalls)" />
-            </g>
-            <g id="iglooOuter">
-                <use href="#iglooBodyPath" fill="url(#iglooFill)" mask="url(#iglooOuterDoorMask)" />
-            </g>
-        </g>
-    </svg>
 
-    <svg width="0" height="0" style="position:absolute" role="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <use id="t0" href="#tree" />
-            <use id="t1" href="#tree2" />
-            <use id="t2" href="#tree3" />
-
-            <g id="tree" stroke-width="1">
-                <path class="treeTrunkBody"
-                    d="m 77,260 c 5,-81 9,-161 14,-242 4,-0 1,7 2,10 3,77 5,155 8,232 -8,2 -16,2 -24,0 z"
-                    fill="url(#treeTrunk)" />
-                <path fill="url(#branchFill)"
-                    d="M 93,8 C 105,-2 99,38 124,65 c 5,6 8,25 -3,17 C 113,79 104,69 96,69 85,68 58,96 67,71 88,39 80,49 93,8 Z" />
-            </g>
-            <g id="tree2" stroke="none">
-                <path class="treeTrunkBody"
-                    d="m 77,260 c 5,-81 9,-161 14,-242 4,-0 1,7 2,10 3,77 5,155 8,232 -8,2 -16,2 -24,0 z"
-                    fill="url(#treeTrunk)" />
-                <path fill="url(#branchFill)"
-                    d="m 91,1 c -4,0 -3,46 -29,63 27,19 -0,15 -5,32 -9,6 29,10 -17,37 C 53,158 68,140 25,167 c -8,6 -3,26 7,30 -10,9 -30,13 -29,28 10,27 40,19 62,13 22,-2 39,-6 79,5 C 193,237 174,213 159,193 c 22,-25 -11,-32 -24,-48 24,-4 0,-25 -8,-33 C 169,90 96,91 126,58 104,34 99,2 91,1 Z" />
-            </g>
-            <g id="tree3" stroke="none">
-                <path class="treeTrunkBody"
-                    d="m 77,260 c 5,-81 9,-161 14,-242 4,-0 1,7 2,10 3,77 5,155 8,232 -8,2 -16,2 -24,0 z"
-                    fill="url(#treeTrunk)" />
-                <path fill="url(#branchFill)"
-                    d="m 94,2 c -7,0 -5,42 -29,61 8,23 28,20 -13,36 -1,25 37,25 -14,40 6,4 20,30 -24,42 1,7 61,25 -0,53 14,14 62,-5 76,-9 22,-2 48,10 84,13 13,-26 -52,-39 -8,-69 -29,-14 -40,-15 -32,-31 14,-27 17,-26 4,-33 C 92,84 137,72 126,64 101,44 112,2 94,2 Z" />
-            </g>
-
-            <linearGradient id="treeTrunk">
-                <stop offset="0" stop-color="#4a3b2a" />
-                <stop offset="1" stop-color="#2a1b10" />
-            </linearGradient>
-            <linearGradient id="branchFill">
-                <stop offset="0" />
-                <stop offset="1" />
-            </linearGradient>
-            <linearGradient id="iglooFill">
-                <stop offset="0" />
-                <stop offset="1" />
-            </linearGradient>
-            <radialGradient id="iglooFire" cx="50%" cy="50%" r="50%">
-                <stop offset="0.2" stop-color="#ed8d0e" />
-                <stop offset="0.8" stop-color="yellow" />
-            </radialGradient>
-            <radialGradient id="iglooWhiteFadeWalls" cx="50%" cy="0%" r="100%">
-                <stop offset="0.2" stop-color="#FFFFFF" stop-opacity="0" />
-                <stop offset="0.6" stop-color="#FFFFFF" stop-opacity="1" />
-            </radialGradient>
-            <radialGradient id="rGradient">
-                <stop offset="40%" stop-color="#FFFFFF" />
-                <stop offset="95%" stop-color="#BBBBBB" />
-            </radialGradient>
-            <filter id="dither">
-                <feTurbulence type="turbulence" baseFrequency="0.05" numOctaves="3" result="fTurb"></feTurbulence>
-                <feDisplacementMap in="SourceGraphic" in2="fTurb" scale="10" xChannelSelector="R" yChannelSelector="G">
-                </feDisplacementMap>
-            </filter>
-        </defs>
-    </svg>
 
     <script type="module" src="client.js"></script>
 </body>

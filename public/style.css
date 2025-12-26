@@ -116,7 +116,7 @@ body {
     padding: 0px;
     height: 100vh;
     overflow: hidden;
-    background: var(--bgColor130);
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
     font-family: var(--font-main);
     color: var(--text-main);
     display: flex;
@@ -124,160 +124,11 @@ body {
     align-items: center;
 }
 
-#gsapWrapper {
-    position: fixed;
-    top: 0px;
-    left: 0px;
-    right: 0px;
-    width: 100vw;
-    height: 100vh;
-    visibility: hidden;
-    z-index: -1;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.9) 50%, var(--bgColor130) 50%, var(--bgColor130) 100%),
-        linear-gradient(60deg, var(--auroraColor0), transparent 50%),
-        linear-gradient(127deg, var(--auroraColor1), transparent 80%),
-        linear-gradient(280deg, var(--auroraColor2), transparent 50%);
-}
 
-#moonWrapper {
-    position: fixed;
-    display: inline-block;
-    top: 2px;
-    left: 0px;
-    right: 0px;
-}
 
-#moonCenter {
-    display: block;
-    width: 100%;
-    max-width: 900px;
-    padding: 15px;
-    margin-left: auto;
-    margin-right: auto;
-}
 
-#moon {
-    display: block;
-    width: 250px;
-    max-width: 30vw;
-    aspect-ratio: 1/1;
-    background: #FFFFFF;
-    border-radius: 50%;
-    margin-left: auto;
-}
 
-#moon svg {
-    opacity: 1;
-    width: 100%;
-    aspect-ratio: 1/1;
-    filter: blur(5px);
-}
 
-#gsapBody {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    object-fit: contain;
-    perspective: 1000px;
-}
-
-.svgWrapper {
-    position: absolute;
-    overflow: visible;
-    margin-right: auto;
-    transform-style: preserve-3d;
-    will-change: transform;
-}
-
-.svgWrapper svg {
-    width: 1200px;
-    height: 800px;
-    overflow: visible;
-}
-
-/* Depth layering */
-.svgWrapper:has(svg#svg00) {
-    transform: translateZ(0px);
-}
-
-.svgWrapper:has(svg#svg0) {
-    transform: translateZ(-250px);
-}
-
-.svgWrapper:has(svg#svg1) {
-    transform: translateZ(-300px);
-}
-
-.svgWrapper:has(svg#svg2d) {
-    transform: translateZ(-325px);
-}
-
-.svgWrapper:has(svg#svg2Igloo) {
-    transform: translateZ(-400px);
-}
-
-.svgWrapper:has(svg#svg2),
-.svgWrapper:has(svg#svg2b) {
-    transform: translateZ(-400px);
-}
-
-.svgWrapper:has(svg#svg3) {
-    transform: translateZ(-600px);
-}
-
-.svgWrapper:has(svg#svg4) {
-    transform: translateZ(-1250px);
-}
-
-.svgWrapper:has(svg#svg5) {
-    transform: translateZ(-1500px);
-}
-
-.svgWrapper:has(svg#svg6) {
-    transform: translateZ(-1750px);
-}
-
-/* SVG Color Links */
-linearGradient#branchFill stop:first-of-type {
-    stop-color: var(--bgColor80);
-}
-
-linearGradient#branchFill stop:last-of-type {
-    stop-color: var(--bgColor130);
-}
-
-linearGradient#branchStroke stop:first-of-type {
-    stop-color: var(--bgColor);
-}
-
-linearGradient#branchStroke stop:last-of-type {
-    stop-color: var(--bgColor150);
-}
-
-linearGradient#iglooFill stop:first-of-type {
-    stop-color: var(--bgColor120);
-}
-
-linearGradient#iglooFill stop:last-of-type {
-    stop-color: var(--bgColor150);
-}
-
-linearGradient#iglooStroke stop:first-of-type {
-    stop-color: var(--bgColor130);
-}
-
-linearGradient#iglooStroke stop:last-of-type {
-    stop-color: var(--bgColor120);
-}
-
-radialGradient#iglooFire stop:first-of-type {
-    stop-color: var(--fireLight1);
-}
-
-radialGradient#iglooFire stop:last-of-type {
-    stop-color: var(--fireLight2);
-}
 
 /* Background Dice Animation Container */
 #bg-dice-container {

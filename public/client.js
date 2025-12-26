@@ -150,7 +150,8 @@ class FarkleClient {
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
-            try { this.initGSAPBackground(); } catch (e) { console.error("GSAP Init Failed", e); }
+            try { this.initSimpleBackground(); } catch (e) { console.error("Background Init Failed", e); }
+
 
             this.debugLog("Modules initialized");
 
@@ -240,153 +241,29 @@ class FarkleClient {
         }
     }
 
-    initGSAPBackground() {
-        const select = (e) => document.querySelector(e);
-        const gsapBody = select("#gsapBody");
-        if (!gsapBody) return;
 
-        const t0 = select("#t0"), t1 = select("#t1"), t2 = select("#t2");
-        const svgs = ["svg00", "svg0", "svg1", "svg2", "svg2b", "svg2d", "svg3", "svg4", "svg5", "svg6"].map(id => select(`svg#${id}`));
-        const bodyStyle = getComputedStyle(document.body);
 
-        const closePath = (svg, fillColor) => {
-            const path = svg.querySelector(".mPath");
-            if (!path) return;
-            const id = path.getAttribute("id");
-            const oldPath = path.getAttribute("d");
-            let boxPath = path.cloneNode(true);
-            boxPath.id = id + "b";
-            boxPath.classList.remove("mPath");
-            boxPath.classList.add("mFill");
-            if (fillColor.charAt(0) == "#") gsap.set(boxPath, { fill: fillColor });
-            else boxPath.classList.add(fillColor);
-            let newPath = oldPath + " V 1200 H -800 Z";
-            gsap.set(boxPath, { attr: { d: newPath } });
-            svg.appendChild(boxPath);
-        };
+    initSimpleBackground() {
+        const container = document.getElementById('bg-dice-container');
+        if (!container) return;
 
-        const createTrees = (svg, start, direction, division, numT, scale) => {
-            const path = svg.querySelector(".mPath");
-            if (!path) return;
-            for (let i = 0; i < numT; i++) {
-                let treeSource = null;
-                if (scale <= 0.15) treeSource = t2;
-                else if (scale <= 0.3) treeSource = t1;
-                else treeSource = t0;
+        const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        const numDice = 20;
 
-                if (!treeSource) continue;
-                let newTree = treeSource.cloneNode(true);
+        for (let i = 0; i < numDice; i++) {
+            const die = document.createElement('div');
+            die.classList.add('bg-die');
+            die.textContent = diceChars[Math.floor(Math.random() * diceChars.length)];
 
-                newTree.id = svg.id + "tb" + i;
-                svg.appendChild(newTree);
+            // Randomize position and animation
+            die.style.left = `${Math.random() * 100}%`;
+            die.style.fontSize = `${Math.random() * 2 + 1}rem`;
+            die.style.opacity = '0.05';
+            die.style.animationDuration = `${Math.random() * 10 + 15}s`; // Slow float
+            die.style.animationDelay = `-${Math.random() * 20}s`; // Start at random times
 
-                let startPos = (direction > 0) ? (0.5 - start + i * (1 / division)) : (0.5 + start - i * (1 / division));
-                gsap.set(newTree, {
-                    scale: scale,
-                    motionPath: { path: path, align: path, alignOrigin: [0.5, 0.97], start: startPos, end: startPos, autoRotate: true }
-                });
-            }
-        };
-
-        // Initialize Background Elements
-        const [s00, s0, s1, s2, s2b, s2d, s3, s4, s5, s6] = svgs;
-        closePath(s00, "bgColor130"); closePath(s0, "bgColor130"); closePath(s1, "bgColor140");
-        closePath(s2, "bgColor150"); closePath(s3, "bgColor130"); closePath(s4, "bgColor");
-        closePath(s5, "bgColor90"); closePath(s6, "bgColor80");
-
-        createTrees(s00, 0.49, 1, 1, 2, 2.1); createTrees(s00, 0.49, -1, 1, 2, 2.1);
-        createTrees(s0, 0.42, 1, 20, 4, 2); createTrees(s0, 0.32, -1, 20, 3, 2);
-        createTrees(s1, 0.30, 1, 34, 2, 1.5); createTrees(s2d, 0.42, 1, 13, 3, 2);
-        createTrees(s2b, 0.42, 1, 18, 3, 1.5); createTrees(s2b, 0.3, -1, 18, 3, 1.5);
-        createTrees(s2, 0.3, 1, 24, 3, 1); createTrees(s2, 0.32, 1, 24, 2, 1.25);
-        createTrees(s2, 0.2, -1, 28, 2, 1); createTrees(s2, 0.1, 1, 1, 1, 1.5);
-        createTrees(s3, 0.35, 1, 60, 8, 0.3); createTrees(s3, 0.3, -1, 60, 8, 0.3);
-        createTrees(s4, 0.32, 1, 30, 3, 0.2); createTrees(s4, 0.34, 1, 38, 6, 0.2);
-        createTrees(s4, 0.32, -1, 42, 5, 0.2); createTrees(s5, 0.18, 1, 40, 5, 0.15);
-        createTrees(s5, 0.16, 1, 80, 3, 0.15); createTrees(s5, 0.1, 1, 30, 5, 0.15);
-        createTrees(s6, 0.31, -1, 170, 4, 0.1); createTrees(s6, 0.3, -1, 120, 6, 0.1);
-        createTrees(s6, 0.22, -1, 120, 6, 0.1);
-
-        // Aurora Color Cycle
-        gsap.timeline({
-            repeat: -1, yoyo: true, defaults: { duration: 10, ease: 'none' },
-            onUpdate() {
-                const hexToRgb = (hex) => {
-                    let c = hex.substring(1).split('');
-                    if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
-                    c = '0x' + c.join('');
-                    return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-                };
-
-                const mix = (c1, c2, weight) => {
-                    const r1 = c1[0], g1 = c1[1], b1 = c1[2];
-                    const r2 = c2[0], g2 = c2[1], b2 = c2[2];
-                    const w = 2 * weight - 1;
-                    const a = 0;
-                    const w1 = ((w * a === -1) ? w : (w + a) / (1 + w * a)) + 1;
-                    const w2 = 1 - w1;
-                    return [
-                        Math.round((r1 * w1 + r2 * w2) / 2),
-                        Math.round((g1 * w1 + g2 * w2) / 2),
-                        Math.round((b1 * w1 + b2 * w2) / 2)
-                    ];
-                };
-
-                const rgbToString = (rgb) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-                const rgbToRgbaString = (rgb, alpha = 1) => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-
-                // Helper to parse "rgb(r, g, b)"
-                const parseRgb = (str) => {
-                    const m = str.match(/\d+/g);
-                    return m ? m.map(Number) : [0, 0, 0];
-                };
-
-                const auroraColor1 = bodyStyle.getPropertyValue('--auroraColor1') || "rgb(0,0,0)";
-                const ac1 = parseRgb(auroraColor1);
-
-                const white = [255, 255, 255];
-                const black = [0, 0, 0];
-
-                const bg = mix(white, ac1, 0.4);
-                const bgColor = mix(bg, black, 0.7);
-
-                const colors = {
-                    "--bg": rgbToString(bg),
-                    "--bgColor": rgbToString(bgColor),
-                    "--bgColor90": rgbToString(mix(bgColor, black, 0.1)),
-                    "--bgColor80": rgbToString(mix(bgColor, black, 0.2)),
-                    "--bgColor70": rgbToString(mix(bgColor, black, 0.3)),
-                    "--bgColor60": rgbToString(mix(bgColor, black, 0.4)),
-                    "--bgColor50": rgbToString(mix(bgColor, black, 0.5)),
-                    "--bgColor110": rgbToString(mix(bgColor, white, 0.1)),
-                    "--bgColor120": rgbToString(mix(bgColor, white, 0.2)),
-                    "--bgColor130": rgbToString(mix(bgColor, white, 0.3)),
-                    "--bgColor140": rgbToString(mix(bgColor, white, 0.4)),
-                    "--bgColor150": rgbToString(mix(bgColor, white, 0.5))
-                };
-                const update = {};
-                for (let k in colors) update[k] = colors[k];
-                gsap.set("body", update);
-            }
-        })
-            .to("body", { "--auroraColor0": "rgb(0 0 255)", "--auroraColor1": "rgb(255 0 0)", "--auroraColor2": "rgb(0 255 0)" })
-            .to("body", { "--auroraColor0": "rgb(0 255 0)", "--auroraColor1": "rgb(0 0 255)", "--auroraColor2": "rgb(255 0 0)" })
-            .to("body", { "--auroraColor0": "rgb(255 0 0)", "--auroraColor1": "rgb(0 255 0)", "--auroraColor2": "rgb(0 0 255)" });
-
-        // Igloo Setup
-        const svg2IglooWrapper = select("#svg2IglooWrapper");
-        const land2Igloo = select("#land2Igloo");
-        const newIgloo = select("#svg2Igloo");
-        if (newIgloo && svg2IglooWrapper) {
-            newIgloo.style.display = "block";
-            svg2IglooWrapper.appendChild(newIgloo);
-            gsap.set(newIgloo, {
-                scale: 1,
-                motionPath: { path: land2Igloo, align: land2Igloo, alignOrigin: [0.5, 0.5], start: 0.5, end: 0.5, autoRotate: true }
-            });
+            container.appendChild(die);
         }
-
-        gsap.set("#gsapWrapper", { autoAlpha: 1 });
     }
 
     async initDiscord() {
@@ -983,7 +860,7 @@ class Dice3DManager {
         this.container.appendChild(this.renderer.domElement);
 
         this.world = new CANNON.World();
-        this.world.gravity.set(0, -60, 0); // Stronger gravity for "quick" feel
+        this.world.gravity.set(0, -200, 0); // Much stronger gravity for "snappy" feel
         this.world.allowSleep = true;
 
         const floorMat = new CANNON.Material();
@@ -1073,7 +950,7 @@ class Dice3DManager {
             this.isRunning = true;
             this.rollStartTime = Date.now();
 
-            setTimeout(() => { if (this.isRunning) this.stopRoll(); }, 3500);
+            setTimeout(() => { if (this.isRunning) this.stopRoll(); }, 1200);
         });
     }
 
@@ -1113,7 +990,7 @@ class Dice3DManager {
                 position: new CANNON.Vec3((Math.random() - 0.5) * 5, 15 + i * 2, (Math.random() - 0.5) * 5)
             });
 
-            body.velocity.set((Math.random() - 0.5) * 20, -30, (Math.random() - 0.5) * 20);
+            body.velocity.set((Math.random() - 0.5) * 20, -60, (Math.random() - 0.5) * 20);
             body.angularVelocity.set((Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40);
 
             this.world.addBody(body);
@@ -1127,7 +1004,7 @@ class Dice3DManager {
         this.diceObjects.forEach(obj => {
             if (obj.body.velocity.lengthSquared() > 0.2 || obj.body.angularVelocity.lengthSquared() > 0.2) allStopped = false;
         });
-        if (allStopped && Date.now() - this.rollStartTime > 1000) this.stopRoll();
+        if (allStopped && Date.now() - this.rollStartTime > 500) this.stopRoll();
     }
 
     stopRoll() {
@@ -1137,7 +1014,7 @@ class Dice3DManager {
         if (this.resolveRoll) {
             const res = this.resolveRoll;
             this.resolveRoll = null;
-            setTimeout(res, 600);
+            setTimeout(res, 300);
         }
     }
 
