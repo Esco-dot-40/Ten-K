@@ -822,10 +822,19 @@ body {
     display: none !important;
 }
 
+.btn.small {
+    min-width: 80px;
+    height: 36px;
+    padding: 0 16px;
+    font-size: 0.85rem;
+    border-radius: 18px;
+    letter-spacing: 0.5px;
+}
+
 .room-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.5rem;
     margin-top: 1.5rem;
     width: 100%;
 }

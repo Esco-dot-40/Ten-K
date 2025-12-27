@@ -1,84 +1,154 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import * as CANNON from "cannon-es";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 
-gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
+// Removed GSAP imports as they were unused and causing loading issues
+// Inlined Rules to prevent module loading race conditions or path errors
 
-// Game Rules (Merged from rules.js to avoid module resolution issues)
-const SCORING_RULES = {
-    TRIPLE_1: 1000,
-    TRIPLE_2: 200,
-    TRIPLE_3: 300,
-    TRIPLE_4: 400,
-    TRIPLE_5: 500,
-    TRIPLE_6: 600,
-    SINGLE_1: 100,
-    SINGLE_5: 50,
-    STRAIGHT: 1500
+// --- INLINED RULES START ---
+const DEFAULT_RULES = {
+    // Scoring Values
+    single1: 100,
+    single5: 50,
+    triple1: 1000,
+    triple2: 200,
+    triple3: 300,
+    triple4: 400,
+    triple5: 500,
+    triple6: 600,
+    straight: 1500,
+    threePairs: 1500,
+    fourOfAKind: 1000,
+    fiveOfAKind: 2000,
+    sixOfAKind: 3000,
+    sixOnes: 5000,
+    twoTriplets: 2500,
+    fullHouseBonus: 250,
+
+    // Feature Toggles (Game Modes/Variants can override these)
+    enableThreePairs: true,
+    enableTwoTriplets: true,
+    enableFullHouse: false,
+    enableSixOnesInstantWin: false,
+
+    // Logic Variants
+    openingScore: 500,
+    winScore: 10000,
+    threeFarklesPenalty: 1000,
+    toxicTwos: false,
+    welfareMode: false,
+    highStakes: false,
+    noFarkleFirstRoll: false
 };
 
-function isScoringSelection(dice) {
-    if (!dice || dice.length === 0) return false;
-    const counts = {};
-    for (const die of dice) counts[die] = (counts[die] || 0) + 1;
-
-    // Check Straight
-    if (dice.length === 6) {
-        const isStraight = (counts[1] === 1 && counts[2] === 1 && counts[3] === 1 && counts[4] === 1 && counts[5] === 1 && counts[6] === 1);
-        if (isStraight) return true;
-    }
-
-    for (let face = 1; face <= 6; face++) {
-        const count = counts[face] || 0;
-        if (count > 0) {
-            if (count < 3 && face !== 1 && face !== 5) return false;
-        }
-    }
-    return true;
-}
-
-function calculateScore(dice) {
+function calculateScore(dice, rules = DEFAULT_RULES) {
     if (!dice || dice.length === 0) return 0;
-    const counts = {};
-    for (const die of dice) counts[die] = (counts[die] || 0) + 1;
 
-    // Check Straight
-    if (dice.length === 6) {
-        const isStraight = (counts[1] === 1 && counts[2] === 1 && counts[3] === 1 && counts[4] === 1 && counts[5] === 1 && counts[6] === 1);
-        if (isStraight) return SCORING_RULES.STRAIGHT;
+    // Ensure rules object is complete
+    rules = { ...DEFAULT_RULES, ...rules };
+
+    const counts = {};
+    for (const die of dice) {
+        counts[die] = (counts[die] || 0) + 1;
+    }
+    const distinct = Object.keys(counts).length;
+    const totalDice = dice.length;
+
+    // 1. Straight (1-6)
+    if (totalDice === 6 && distinct === 6) return rules.straight;
+
+    // 2. Six Ones
+    if (counts[1] === 6) return rules.sixOnes;
+
+    // 3. Six of a Kind
+    for (let i = 2; i <= 6; i++) {
+        if (counts[i] === 6) return rules.sixOfAKind;
     }
 
+    // 4. Three Pairs
+    if (rules.enableThreePairs && totalDice === 6 && distinct === 3) {
+        const isThreePairs = Object.values(counts).every(c => c === 2);
+        if (isThreePairs) return rules.threePairs;
+    }
+
+    // 5. Two Triplets
+    if (rules.enableTwoTriplets && totalDice === 6 && distinct === 2) {
+        const vals = Object.values(counts);
+        if (vals[0] === 3 && vals[1] === 3) return rules.twoTriplets;
+    }
+
+    // --- Standard Counting Score ---
     let score = 0;
+
     for (let face = 1; face <= 6; face++) {
         const count = counts[face] || 0;
+        if (count === 0) continue;
+
         let tripleValue = 0;
-        if (face === 1) tripleValue = SCORING_RULES.TRIPLE_1;
-        else if (face === 2) tripleValue = SCORING_RULES.TRIPLE_2;
-        else if (face === 3) tripleValue = SCORING_RULES.TRIPLE_3;
-        else if (face === 4) tripleValue = SCORING_RULES.TRIPLE_4;
-        else if (face === 5) tripleValue = SCORING_RULES.TRIPLE_5;
-        else if (face === 6) tripleValue = SCORING_RULES.TRIPLE_6;
+        switch (face) {
+            case 1: tripleValue = rules.triple1; break;
+            case 2: tripleValue = rules.triple2; break;
+            case 3: tripleValue = rules.triple3; break;
+            case 4: tripleValue = rules.triple4; break;
+            case 5: tripleValue = rules.triple5; break;
+            case 6: tripleValue = rules.triple6; break;
+        }
+
         if (count >= 3) {
-            let multiplier = 0;
-            if (count === 3) multiplier = 1;
-            else if (count === 4) multiplier = 2;
-            else if (count === 5) multiplier = 3;
-            else if (count === 6) multiplier = 4;
-            score += tripleValue * multiplier;
+            if (count === 3) {
+                score += tripleValue;
+            } else if (count === 4) {
+                if (face === 1 && (1000 + (count - 3) * 100) > rules.fourOfAKind) {
+                    score += (tripleValue + (count - 3) * rules.single1);
+                } else {
+                    score += rules.fourOfAKind;
+                }
+            } else if (count === 5) {
+                if (face === 1 && (1000 + (count - 3) * 100) > rules.fiveOfAKind) {
+                    score += (tripleValue + (count - 3) * rules.single1);
+                } else {
+                    score += rules.fiveOfAKind;
+                }
+            } else if (count === 6) {
+                score += rules.sixOfAKind;
+            }
         } else {
-            if (face === 1) score += count * SCORING_RULES.SINGLE_1;
-            if (face === 5) score += count * SCORING_RULES.SINGLE_5;
+            if (face === 1) score += count * rules.single1;
+            else if (face === 5) score += count * rules.single5;
         }
     }
     return score;
 }
 
+function isScoringSelection(dice, rules = DEFAULT_RULES) {
+    const score = calculateScore(dice, rules);
+    if (score === 0) return false;
+
+    // Check for contributing dice
+    const counts = {};
+    for (const d of dice) counts[d] = (counts[d] || 0) + 1;
+
+    // If straight, all contribute.
+    if (dice.length === 6 && Object.keys(counts).length === 6) return true;
+
+    // If 3 pairs, all contribute.
+    if ((rules.enableThreePairs || DEFAULT_RULES.enableThreePairs) && dice.length === 6 && Object.values(counts).every(c => c === 2)) return true;
+
+    // Check individual faces
+    for (let face = 1; face <= 6; face++) {
+        const c = counts[face] || 0;
+        if (c > 0) {
+            if (face === 1 || face === 5) continue;
+            if (c < 3) return false;
+        }
+    }
+    return true;
+}
+// --- INLINED RULES END ---
+
 // Global reference for Discord SDK (dynamically imported)
 let DiscordSDK = null;
-const DISCORD_CLIENT_ID = '1317075677927768074'; // Real Client ID
+const DISCORD_CLIENT_ID = '1317075677927768074';
 
 console.log("Farkle Client Execution Started");
 
@@ -87,14 +157,10 @@ class FarkleClient {
         console.log("FarkleClient constructor start");
 
         // Immediate UI feedback
-        const loadingContainer = document.getElementById('room-list-container');
+        const loadingContainer = document.getElementById('connection-debug');
         if (loadingContainer) {
-            loadingContainer.innerHTML = `
-                <p style="color:var(--primary);">Script Running...</p>
-                <p style="color:var(--text-muted); font-size: 0.8rem;">Connecting to server...</p>
-            `;
+            loadingContainer.textContent = "Script Running...";
         }
-        // Global error handler for this instance
         window.onerror = (msg, url, line) => {
             this.debugLog(`JS Error: ${msg} at ${line}`);
             return false;
@@ -108,6 +174,9 @@ class FarkleClient {
             this.playerName = null;
             this.isRolling = false;
             this.pendingState = null;
+            this.rules = {}; // Will load from server state
+            this.isSpeedMode = false;
+            this.isSpectator = false; // NEW
 
             // UI Elements
             this.ui = {
@@ -140,18 +209,39 @@ class FarkleClient {
             // Hook up start button
             if (this.ui.startGameBtn) {
                 this.ui.startGameBtn.addEventListener('click', () => {
-                    this.joinGame();
+                    // No-op, managed by logic
                 });
             }
 
-            this.playerName = null;
-
             this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer);
+
+            // Speed Mode Hookup
+            const speedBtn = document.getElementById('mode-speed-btn');
+            const casualBtn = document.getElementById('mode-casual-btn');
+            const modeSelection = document.getElementById('mode-selection');
+            const roomList = document.getElementById('room-list-container');
+
+            if (speedBtn && casualBtn) {
+                speedBtn.addEventListener('click', () => {
+                    this.isSpeedMode = true;
+                    this.dice3D.setSpeed(true);
+                    modeSelection.style.display = 'none';
+                    roomList.style.display = 'grid';
+                    this.socket.emit('get_room_list');
+                });
+                casualBtn.addEventListener('click', () => {
+                    this.isSpeedMode = false;
+                    this.dice3D.setSpeed(false);
+                    modeSelection.style.display = 'none';
+                    roomList.style.display = 'grid';
+                    this.socket.emit('get_room_list');
+                });
+            }
+
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
             try { this.initSimpleBackground(); } catch (e) { console.error("Background Init Failed", e); }
-
 
             this.debugLog("Modules initialized");
 
@@ -164,13 +254,12 @@ class FarkleClient {
                 return;
             }
 
-            // Initialize socket and events carefully
             this.debugLog("Connecting to server...");
             this.socket = io({
                 reconnectionAttempts: 10,
                 reconnectionDelay: 1000,
                 autoConnect: false,
-                transports: ['websocket', 'polling'] // Try both
+                transports: ['websocket', 'polling']
             });
 
             this.initSocketEvents();
@@ -185,26 +274,14 @@ class FarkleClient {
 
     debugLog(msg) {
         console.log(`[Debug] ${msg}`);
-        const container = document.getElementById('room-list-container');
-        if (container) {
-            const status = container.querySelector('.connection-status') || document.createElement('div');
-            if (!status.classList.contains('connection-status')) {
-                status.className = 'connection-status';
-                status.style.fontSize = '0.75rem';
-                status.style.color = 'var(--text-muted)';
-                status.style.marginTop = '10px';
-                container.appendChild(status);
-            }
-            status.textContent = `Status: ${msg}`;
-        }
+        const debugDiv = document.getElementById('connection-debug');
+        if (debugDiv) debugDiv.textContent = msg;
     }
 
     initSettings() {
-        // Toggle Modal
         this.ui.settingsBtn.addEventListener('click', () => this.ui.settingsModal.classList.remove('hidden'));
         this.ui.settingsModal.querySelector('.close-modal').addEventListener('click', () => this.ui.settingsModal.classList.add('hidden'));
 
-        // Theme Buttons
         this.ui.themeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const theme = btn.dataset.theme;
@@ -221,14 +298,12 @@ class FarkleClient {
             });
         });
 
-        // Dice Theme
         this.ui.diceThemeSelect.addEventListener('change', (e) => {
             const val = e.target.value;
             document.body.setAttribute('data-dice-theme', val);
             localStorage.setItem('farkle-dice-theme', val);
         });
 
-        // Load saved
         const savedTheme = localStorage.getItem('farkle-theme');
         if (savedTheme) {
             const btn = document.querySelector(`.theme-btn[data-theme="${savedTheme}"]`);
@@ -241,12 +316,9 @@ class FarkleClient {
         }
     }
 
-
-
     initSimpleBackground() {
         const container = document.getElementById('bg-dice-container');
         if (!container) return;
-
         const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
         const numDice = 20;
 
@@ -254,20 +326,16 @@ class FarkleClient {
             const die = document.createElement('div');
             die.classList.add('bg-die');
             die.textContent = diceChars[Math.floor(Math.random() * diceChars.length)];
-
-            // Randomize position and animation
             die.style.left = `${Math.random() * 100}%`;
             die.style.fontSize = `${Math.random() * 2 + 1}rem`;
             die.style.opacity = '0.05';
-            die.style.animationDuration = `${Math.random() * 10 + 15}s`; // Slow float
-            die.style.animationDelay = `-${Math.random() * 20}s`; // Start at random times
-
+            die.style.animationDuration = `${Math.random() * 10 + 15}s`;
+            die.style.animationDelay = `-${Math.random() * 20}s`;
             container.appendChild(die);
         }
     }
 
     async initDiscord() {
-        // Disabled as requested: "i dont care about getting the discord usernames of the players rn"
         this.debugLog("Discord Integration: Manual Mode");
         this.playerName = `Player ${Math.floor(Math.random() * 1000)}`;
     }
@@ -275,31 +343,27 @@ class FarkleClient {
     async updateDiscordPresence(details, state) {
         if (!this.discordSdk) return;
         try {
-            // This requires rpc.activities.write scope and valid auth
             await this.discordSdk.commands.setActivity({
                 activity: {
                     details: details,
                     state: state,
                     assets: {
-                        large_image: "farkle_icon", // Asset key from Discord Dev Portal
+                        large_image: "farkle_icon",
                         large_text: "Farkle"
                     }
                 }
             });
         } catch (e) {
-            // console.warn("Failed to set activity", e);
         }
     }
 
     initListeners() {
         this.ui.rollBtn.addEventListener('click', () => {
             if (this.canInteract()) {
-                // Send what the user SEES as selected to prevent lag issues
                 const selectedIds = Array.from(document.querySelectorAll('.die.selected'))
                     .map(el => el.dataset.id)
-                    .filter(id => id); // remove null/undefined
-
-                this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: selectedIds });
+                    .filter(id => id);
+                this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: selectedIds, useHighStakes: false });
             }
         });
 
@@ -316,19 +380,13 @@ class FarkleClient {
             const dieEl = e.target.closest('.die');
             if (dieEl && this.canInteract()) {
                 const id = dieEl.dataset.id;
-
-                // Optimistic UI Toggle
                 dieEl.classList.toggle('selected');
-
                 this.socket.emit('toggle_die', { roomCode: this.roomCode, dieId: id });
             }
         });
 
-        // Modals
         this.ui.rulesBtn.addEventListener('click', () => this.ui.rulesModal.classList.remove('hidden'));
         this.ui.rulesModal.querySelector('.close-modal').addEventListener('click', () => this.ui.rulesModal.classList.add('hidden'));
-
-        this.ui.startGameBtn.addEventListener('click', () => this.joinGame());
 
         this.ui.restartBtn.addEventListener('click', () => {
             this.socket.emit('restart', { roomCode: this.roomCode });
@@ -338,60 +396,48 @@ class FarkleClient {
 
     initSocketEvents() {
         this.socket.on('connect', () => {
-            this.debugLog(`Connected! ID: ${this.socket.id}`);
+            this.debugLog(`Connected!`);
             this.showFeedback("Connected!", "success");
 
-            // Enable Button
-            if (this.ui.startGameBtn) {
-                this.ui.startGameBtn.textContent = "JOIN TABLE";
-                this.ui.startGameBtn.disabled = false;
-                this.ui.startGameBtn.style.opacity = "1";
-                this.ui.startGameBtn.style.cursor = "pointer";
+            const modeSelection = document.getElementById('mode-selection');
+            const roomList = document.getElementById('room-list-container');
+            const loadMsg = document.getElementById('connection-debug');
+            if (loadMsg) loadMsg.style.display = 'none';
+
+            if (!this.roomCode) {
+                modeSelection.style.display = 'block';
             }
-            const debugEl = document.getElementById('connection-debug');
-            if (debugEl) debugEl.textContent = "Connected to server.";
 
-            // Explicitly request room list to avoid race conditions
-            this.socket.emit('get_room_list');
-
-            if (this.roomCode && this.playerName) {
-                console.log('Attempting auto-rejoin...');
-                this.socket.emit('join_game', { roomCode: this.roomCode, playerName: this.playerName });
-                this.showFeedback("Reconnecting...", "info");
+            if (this.roomCode) {
+                this.socket.emit('join_game', { roomCode: this.roomCode });
             }
         });
 
         this.socket.on('connect_error', (err) => {
             this.debugLog(`Connection Error: ${err.message}`);
-            console.error("Socket Connection Error:", err);
-
-            const container = document.getElementById('room-list-container');
-            if (container && container.innerText.includes('Loading')) {
-                container.innerHTML = `<p style="color:var(--danger)">Connection Failed. <button class="btn secondary" onclick="location.reload()">Retry</button></p>`;
-            }
-            const debugEl = document.getElementById('connection-debug');
-            if (debugEl) debugEl.textContent = `Connection Error: ${err.message}`;
-
             this.showFeedback("Connection Error!", "error");
         });
 
         this.socket.on('room_list', (rooms) => {
-            this.debugLog(`Received ${rooms.length} tables`);
             this.renderRoomList(rooms);
         });
 
         this.socket.on('disconnect', (reason) => {
             this.debugLog(`Disconnected: ${reason}`);
-            console.log('Disconnected from server');
             this.showFeedback("Connection Lost! Reconnecting...", "error");
         });
 
-        this.socket.on('joined', ({ playerId, state }) => {
+        this.socket.on('joined', ({ playerId, state, isSpectator }) => {
             this.playerId = playerId;
-            this.roomCode = state.roomCode; // Save assigned room
+            this.roomCode = state.roomCode;
+            this.isSpectator = isSpectator || false;
+
             this.updateGameState(state);
             this.ui.setupModal.classList.add('hidden');
-            this.showFeedback("Joined Room!", "success");
+
+            if (this.isSpectator) this.showFeedback("Joined as Spectator", "info");
+            else this.showFeedback("Joined Room!", "success");
+
             this.renderControls();
         });
 
@@ -417,7 +463,6 @@ class FarkleClient {
                 this.isRolling = false;
                 if (this.ui.diceContainer) this.ui.diceContainer.classList.remove('rolling');
 
-                // Use the latest state we received during animation, or the one from the roll result
                 const finalState = this.pendingState || data.state;
                 this.pendingState = null;
 
@@ -432,63 +477,110 @@ class FarkleClient {
         });
 
         this.socket.on('error', (msg) => {
-            if (msg === "Game not active" || msg === "Room full" || msg === "Room Full") {
-                console.error("Game Error:", msg);
-                this.showFeedback(msg, "error");
-            } else {
-                alert(msg);
-            }
+            this.showFeedback(msg, "error");
         });
     }
 
-    renderRoomList(rooms) {
-        if (!Array.isArray(rooms)) {
-            this.debugLog(`Error: Invalid room list data received`);
-            return;
-        }
-
+    renderRoomList(allRooms) {
+        if (!Array.isArray(allRooms)) return;
         const container = document.getElementById('room-list-container');
         if (!container) return;
 
+        // Filter rooms based on current mode
+        const targetCategory = this.isSpeedMode ? 'speed' : 'casual';
+        const rooms = allRooms.filter(r => r.category === targetCategory);
+
+        // Re-create container structure to prevent duplicates but keep back button logic
+        container.innerHTML = '';
+
+        const backRow = document.createElement('div');
+        backRow.style.gridColumn = "1/-1";
+        backRow.style.marginBottom = "10px";
+        const backBtn = document.createElement('button');
+        backBtn.className = 'btn secondary small';
+        backBtn.textContent = '← Back to Modes';
+        backBtn.onclick = () => {
+            container.style.display = 'none';
+            document.getElementById('mode-selection').style.display = 'block';
+        };
+        backRow.appendChild(backBtn);
+        container.appendChild(backRow);
+
         if (rooms.length === 0) {
-            container.innerHTML = '<p style="color:var(--text-muted); padding: 1rem; text-align: center; font-size: 0.8rem;">No active public tables.</p>';
+            const msg = document.createElement('p');
+            msg.style.cssText = 'color:var(--text-muted); padding: 1rem; text-align: center; font-size: 0.8rem;';
+            msg.textContent = 'No active tables for this mode.';
+            container.appendChild(msg);
             return;
         }
 
-        container.innerHTML = '<p style="color:var(--text-muted); font-size: 0.8rem; grid-column: 1/-1; margin-bottom: 0.5rem;">Or select active table:</p>';
+        const label = document.createElement('p');
+        label.style.cssText = 'color:var(--text-muted); font-size: 0.8rem; grid-column: 1/-1; margin-bottom: 0.5rem;';
+        label.textContent = 'Or select active table:';
+        container.appendChild(label);
+
         rooms.forEach(room => {
             const card = document.createElement('div');
             card.className = `room-card ${room.count >= room.max ? 'full' : ''}`;
 
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
             const title = document.createElement('h3');
             title.textContent = room.name;
+            const mode = document.createElement('span');
+            mode.style.fontSize = '0.7rem';
+            mode.style.opacity = '0.8';
+            mode.textContent = room.rulesSummary || 'Standard';
+
+            header.appendChild(title);
+            header.appendChild(mode);
 
             const status = document.createElement('div');
             status.className = 'room-status';
-            status.textContent = `${room.count} / ${room.max} Players`;
 
-            if (room.status === 'playing') {
-                status.textContent += ' (In Progress)';
-            }
+            const specText = room.spectators > 0 ? ` (+${room.spectators} 👁️)` : '';
+            status.textContent = `${room.count} / ${room.max} Players${specText}`;
 
-            card.appendChild(title);
+            if (room.status === 'playing') status.textContent += ' (Playing)';
+
+            card.appendChild(header);
             card.appendChild(status);
 
-            if (room.count < room.max || (room.count >= room.max && room.status === 'waiting')) {
-                card.addEventListener('click', () => {
-                    this.joinRoom(room.name);
-                });
-            } else {
-                card.title = "Room Full";
+            const actions = document.createElement('div');
+            actions.style.marginTop = '10px';
+            actions.style.display = 'flex';
+            actions.style.gap = '10px';
+
+            const joinBtn = document.createElement('button');
+            joinBtn.className = 'btn primary small';
+            joinBtn.textContent = 'Join';
+            joinBtn.onclick = (e) => { e.stopPropagation(); this.joinRoom(room.name, false); };
+
+            if (room.count >= room.max) {
+                joinBtn.disabled = true;
+                joinBtn.textContent = 'Full';
+                joinBtn.style.opacity = "0.5";
+            } else if (room.status === 'playing') {
+                // can usually join late? logic says yes if not full
             }
+
+            const watchBtn = document.createElement('button');
+            watchBtn.className = 'btn secondary small';
+            watchBtn.textContent = 'Watch';
+            watchBtn.onclick = (e) => { e.stopPropagation(); this.joinRoom(room.name, true); };
+
+            actions.appendChild(joinBtn);
+            actions.appendChild(watchBtn);
+            card.appendChild(actions);
 
             container.appendChild(card);
         });
     }
 
-    joinRoom(roomCode) {
-        this.debugLog(`Joining ${roomCode}...`);
-        this.socket.emit('join_game', { roomCode: roomCode });
+    joinRoom(roomCode, asSpectator = false) {
+        this.debugLog(`Joining ${roomCode} (${asSpectator ? 'Spectating' : 'Playing'})...`);
+        this.socket.emit('join_game', { roomCode: roomCode, spectator: asSpectator });
     }
 
     joinGame() {
@@ -497,53 +589,38 @@ class FarkleClient {
     }
 
     canInteract() {
-        if (!this.gameState) {
-            // console.log("canInteract: No gameState");
-            return false;
-        }
-        if (this.gameState.gameStatus !== 'playing') {
-            // console.log("canInteract: Status not playing", this.gameState.gameStatus);
-            return false;
-        }
+        if (this.isSpectator) return false;
+        if (!this.gameState || this.gameState.gameStatus !== 'playing') return false;
         if (!this.socket || !this.socket.id) return false;
-
         const currentPlayer = this.gameState.players[this.gameState.currentPlayerIndex];
-        const isMyTurn = currentPlayer && currentPlayer.id === this.socket.id;
-
-        return isMyTurn;
+        return currentPlayer && currentPlayer.id === this.socket.id;
     }
 
     renderPlayers() {
         if (!this.gameState || !this.gameState.players) return;
-
         const container = this.ui.playerZonesContainer;
         if (!container) return;
 
         const players = this.gameState.players;
-        const children = Array.from(container.children);
-
-        // 1. Remove excess cards
         while (container.children.length > players.length) {
             container.removeChild(container.lastChild);
         }
 
-        // 2. Update or Create cards
         players.forEach((player, index) => {
             let card = container.children[index];
             const isCurrent = this.gameState.currentPlayerIndex === index && this.gameState.gameStatus === 'playing';
 
             if (!card) {
-                // Create new card structure
                 card = document.createElement('div');
                 card.className = 'player-card';
                 card.style.minWidth = "150px";
+                if (index === this.gameState.currentPlayerIndex) card.classList.add('active'); // Preload active
 
                 const info = document.createElement('div');
                 info.className = 'player-info';
 
                 const name = document.createElement('span');
                 name.className = 'player-name';
-
                 info.appendChild(name);
 
                 const scoreDiv = document.createElement('div');
@@ -551,23 +628,18 @@ class FarkleClient {
 
                 card.appendChild(info);
                 card.appendChild(scoreDiv);
-
                 container.appendChild(card);
             }
 
-            // Update Content safely
             const nameEl = card.querySelector('.player-name');
             const scoreEl = card.querySelector('.total-score');
-
             if (nameEl && nameEl.textContent !== player.name) nameEl.textContent = player.name;
             if (scoreEl && scoreEl.textContent != player.score) scoreEl.textContent = player.score;
 
-            // Update Classes
             const isActive = card.classList.contains('active');
             if (isCurrent && !isActive) card.classList.add('active');
             if (!isCurrent && isActive) card.classList.remove('active');
 
-            // Update Opacity
             const targetOpacity = player.connected ? "1" : "0.5";
             if (card.style.opacity !== targetOpacity) card.style.opacity = targetOpacity;
         });
@@ -575,33 +647,22 @@ class FarkleClient {
 
     renderDice(dice) {
         if (!this.ui.diceContainer) return;
-
         const container = this.ui.diceContainer;
-
-        // 1. Remove excess dice
         while (container.children.length > dice.length) {
             container.removeChild(container.lastChild);
         }
 
-        // 2. Update or Create dice
         dice.forEach((d, index) => {
             let die = container.children[index];
-
             if (!die) {
                 die = document.createElement('div');
                 die.className = 'die';
                 container.appendChild(die);
             }
-
-            // Update Class for Selection
-            const isSelected = d.selected;
-            if (isSelected && !die.classList.contains('selected')) die.classList.add('selected');
-            if (!isSelected && die.classList.contains('selected')) die.classList.remove('selected');
-
-            // Update Identifiers
+            if (d.selected && !die.classList.contains('selected')) die.classList.add('selected');
+            if (!d.selected && die.classList.contains('selected')) die.classList.remove('selected');
             if (die.dataset.id !== d.id) die.dataset.id = d.id;
 
-            // Update Value and Pips only if changed
             if (die.dataset.value != d.value) {
                 die.dataset.value = d.value;
                 die.innerHTML = '';
@@ -610,82 +671,83 @@ class FarkleClient {
                     pip.className = 'pip';
                     die.appendChild(pip);
                 }
-                // Reset animation only on value update/creation
                 die.style.animation = 'none';
-                die.offsetHeight; /* trigger reflow */
+                die.offsetHeight;
                 die.style.animation = null;
             }
         });
     }
 
-    getDieChar(val) {
-        // Unused now
-        const chars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-        return chars[val - 1] || val;
-    }
-
     updateGameState(state) {
-        // console.log("State Update:", state);
         this.gameState = state;
+        this.rules = state.rules || {};
         this.renderPlayers();
         this.renderControls();
         this.renderDice(state.currentDice);
         this.checkGameOver(state);
 
-        // Update Discord Rich Presence
         if (this.gameState.gameStatus === 'playing') {
             const myPlayer = this.gameState.players.find(p => p.id === this.socket.id);
             if (myPlayer) {
-                const opponent = this.gameState.players.find(p => p.id !== this.socket.id);
                 const scoreText = `Score: ${myPlayer.score}`;
                 const roundText = `Round: ${state.roundAccumulatedScore > 0 ? '+' + state.roundAccumulatedScore : 'Rolling'}`;
                 this.updateDiscordPresence(scoreText, roundText);
+            } else if (this.isSpectator) {
+                this.updateDiscordPresence("Spectating", `Round: ${state.roundAccumulatedScore > 0 ? '+' + state.roundAccumulatedScore : 'Rolling'}`);
             }
-        } else {
-            this.updateDiscordPresence("In Lobby", "Waiting for game");
         }
     }
 
     renderControls() {
         if (!this.gameState) return;
 
-        // Handle Waiting State
+        // If Spectator, hide all controls and show spectator message
+        if (this.isSpectator) {
+            this.ui.rollBtn.style.display = 'none';
+            this.ui.bankBtn.style.display = 'none';
+            const hsBtn = document.getElementById('hs-roll-btn');
+            if (hsBtn) hsBtn.style.display = 'none';
+            const startBtn = document.getElementById('lobby-start-btn');
+            if (startBtn) startBtn.style.display = 'none';
+
+            const currentPlayerName = this.gameState.players[this.gameState.currentPlayerIndex]?.name || "Someone";
+            this.ui.actionText.textContent = `Spectating. Current Turn: ${currentPlayerName}`;
+            this.ui.currentScoreDisplay.textContent = `Round Score: ${this.gameState.roundAccumulatedScore}`;
+            return;
+        }
+
         if (this.gameState.gameStatus === 'waiting') {
             this.ui.currentScoreDisplay.textContent = "Waiting for players...";
             this.ui.rollBtn.style.display = 'none';
             this.ui.bankBtn.style.display = 'none';
+            // Remove High Stakes btn if present
+            const hsBtn = document.getElementById('hs-roll-btn');
+            if (hsBtn) hsBtn.remove();
 
-            // Check for existing start button or create one
             let startBtn = document.getElementById('lobby-start-btn');
             if (!startBtn) {
                 startBtn = document.createElement('button');
                 startBtn.id = 'lobby-start-btn';
                 startBtn.className = 'btn primary';
                 startBtn.textContent = 'Start Game';
-                startBtn.onclick = () => {
-                    this.socket.emit('start_game', { roomCode: this.roomCode });
-                };
-                // Inject into button group
-                if (this.ui.rollBtn.parentElement) {
-                    this.ui.rollBtn.parentElement.appendChild(startBtn);
-                }
+                startBtn.onclick = () => this.socket.emit('start_game', { roomCode: this.roomCode });
+                if (this.ui.rollBtn.parentElement) this.ui.rollBtn.parentElement.appendChild(startBtn);
             }
-
             if (this.gameState.players.length >= 2) {
                 startBtn.style.display = 'block';
                 startBtn.disabled = false;
-                this.ui.actionText.textContent = "Ready to start!";
+                this.ui.actionText.textContent = "Ready or Wait for more";
             } else {
                 startBtn.style.display = 'block';
                 startBtn.disabled = true;
-                this.ui.actionText.textContent = `Need ${2 - this.gameState.players.length} more player(s)`;
+                this.ui.actionText.textContent = `Need ${2 - this.gameState.players.length} more`;
             }
             return;
         }
 
-        // Debug Panel Injection
+        // --- Debug Panel ---
         let debugPanel = document.getElementById('debug-panel');
-        if (!debugPanel && this.ui.bankBtn.parentElement && this.ui.bankBtn.parentElement.parentElement) { // Append to control container
+        if (!debugPanel && this.ui.bankBtn.parentElement && this.ui.bankBtn.parentElement.parentElement) {
             debugPanel = document.createElement('div');
             debugPanel.id = 'debug-panel';
             debugPanel.className = 'tools-panel';
@@ -697,22 +759,16 @@ class FarkleClient {
 
             const restartBtn = document.createElement('button');
             restartBtn.className = 'btn micro';
-            restartBtn.textContent = 'Fix/Restart';
-            restartBtn.title = "Restart round without losing scores/players";
+            restartBtn.textContent = 'Reset';
             restartBtn.onclick = () => {
-                if (confirm("Restart round? Scores will be preserved.")) {
-                    this.socket.emit('debug_restart_preserve', { roomCode: this.roomCode });
-                }
+                if (confirm("Restart game?")) this.socket.emit('debug_restart_preserve', { roomCode: this.roomCode });
             };
 
             debugPanel.appendChild(forceBtn);
             debugPanel.appendChild(restartBtn);
-
-            // Insert after button group
             this.ui.bankBtn.parentElement.parentElement.appendChild(debugPanel);
         }
 
-        // Playing State
         const startBtn = document.getElementById('lobby-start-btn');
         if (startBtn) startBtn.style.display = 'none';
 
@@ -721,16 +777,33 @@ class FarkleClient {
 
         const isMyTurn = this.canInteract();
         const selectedDice = this.gameState.currentDice.filter(d => d.selected);
-        const selectedScore = calculateScore(selectedDice.map(d => d.value));
+        const selectedScore = calculateScore(selectedDice.map(d => d.value), this.rules);
         const totalRound = this.gameState.roundAccumulatedScore + selectedScore;
 
-        // Score Display
         this.ui.currentScoreDisplay.textContent = `Selection: ${selectedScore} (Round: ${totalRound})`;
+
+        // High Stakes Button Logic
+        let hsBtn = document.getElementById('hs-roll-btn');
+        if (!hsBtn) {
+            hsBtn = document.createElement('button');
+            hsBtn.id = 'hs-roll-btn';
+            hsBtn.className = 'btn secondary wiggle-hover'; // Distinct style
+            hsBtn.style.position = 'absolute';
+            hsBtn.style.top = '-50px'; // Position it above or nearby
+            hsBtn.style.left = '50%';
+            hsBtn.style.transform = 'translateX(-50%)';
+            hsBtn.style.whiteSpace = 'nowrap';
+            // We'll append it to the button group
+            if (this.ui.rollBtn.parentElement) {
+                this.ui.rollBtn.parentElement.style.position = 'relative'; // ensure container is relative
+                this.ui.rollBtn.parentElement.appendChild(hsBtn);
+            }
+        }
 
         if (!isMyTurn) {
             this.ui.rollBtn.disabled = true;
             this.ui.bankBtn.disabled = true;
-
+            hsBtn.style.display = 'none';
             const currentPlayerName = this.gameState.players[this.gameState.currentPlayerIndex]?.name || "Someone";
             this.ui.actionText.textContent = `Waiting for ${currentPlayerName}...`;
             this.ui.rollBtn.textContent = 'Roll';
@@ -738,23 +811,43 @@ class FarkleClient {
             this.ui.actionText.textContent = "Your turn";
 
             const hasSelected = selectedDice.length > 0;
+            const startOfTurn = (this.gameState.currentDice.length === 0);
 
-            if (this.gameState.currentDice.length === 0) {
-                this.ui.rollBtn.disabled = false;
-                this.ui.rollBtn.textContent = "Roll Dice";
+            if (startOfTurn) {
+                // Main Roll Logic (Start of Turn)
                 this.ui.bankBtn.disabled = true;
+
+                // Check if High Stakes is valid
+                if (this.gameState.canHighStakes) {
+                    hsBtn.style.display = 'block';
+                    hsBtn.textContent = `Roll Leftovers? (+1000pts)`;
+                    hsBtn.onclick = () => {
+                        this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: [], useHighStakes: true });
+                        hsBtn.style.display = 'none';
+                    };
+
+                    this.ui.rollBtn.textContent = "Roll Fresh (6)";
+                    this.ui.rollBtn.disabled = false;
+                } else {
+                    hsBtn.style.display = 'none';
+                    this.ui.rollBtn.textContent = "Roll Dice";
+                    this.ui.rollBtn.disabled = false;
+                }
+
             } else {
-                const isValid = isScoringSelection(selectedDice.map(d => d.value));
+                // Mid-turn
+                hsBtn.style.display = 'none';
+
+                const isValid = isScoringSelection(selectedDice.map(d => d.value), this.rules);
                 if (isValid) {
                     this.ui.rollBtn.disabled = false;
                     this.ui.rollBtn.textContent = "Roll Remaining";
                     this.ui.bankBtn.disabled = false;
                 } else {
-                    this.ui.rollBtn.disabled = true; // Must select
+                    this.ui.rollBtn.disabled = true;
                     this.ui.bankBtn.disabled = true;
-                    // Check if we just rolled Hot Dice (6 fresh dice, score > 0 implied by round logic usually, but here we just check count)
-                    if (this.gameState.currentDice.length === 6 && this.gameState.roundAccumulatedScore > 0 && selectedDice.length === 0) {
-                        this.ui.actionText.textContent = "HOT DICE! Select scoring dice!";
+                    if (this.gameState.currentDice.length === 6 && this.gameState.roundAccumulatedScore > 0 && !selectedDice.length) {
+                        this.ui.actionText.textContent = "HOT DICE! Select to continue!";
                     } else {
                         this.ui.actionText.textContent = "Select scoring dice!";
                     }
@@ -770,14 +863,13 @@ class FarkleClient {
     checkGameOver(state) {
         if (state.gameStatus === 'finished') {
             this.ui.gameOverModal.classList.remove('hidden');
-
             const winner = state.winner;
             let title = "";
             if (winner === 'tie') title = "It's a Tie!";
             else if (winner) title = `${winner.name} Wins!`;
-
             this.ui.winnerText.textContent = title;
 
+            // Populate score board
             const p1 = state.players[0];
             const p2 = state.players[1];
             if (p1) {
@@ -799,10 +891,7 @@ class FarkleClient {
         this.ui.feedback.classList.remove('hidden');
         if (type === 'error') this.ui.feedback.classList.add('error');
         else if (type === 'success') this.ui.feedback.classList.add('success');
-        else {
-            this.ui.feedback.classList.remove('error', 'success');
-        }
-
+        else this.ui.feedback.classList.remove('error', 'success');
         setTimeout(() => {
             this.ui.feedback.classList.add('hidden');
         }, 2000);
@@ -815,62 +904,41 @@ class Dice3DManager {
         this.container = container;
         this.diceObjects = [];
         this.isRunning = false;
-        this.targetValues = [];
-        this.resolveRoll = null;
-        this.rollStartTime = 0;
-        this.palette = [
-            "#EAA14D", "#E05A47", "#4D9BEA", "#5FB376",
-            "#D869A8", "#F2C94C", "#9B51E0", "#FFFFFF"
-        ];
-
-        this.faceNormals = [
-            new THREE.Vector3(1, 0, 0),  // 1
-            new THREE.Vector3(-1, 0, 0), // 6
-            new THREE.Vector3(0, 1, 0),  // 2
-            new THREE.Vector3(0, -1, 0), // 5
-            new THREE.Vector3(0, 0, 1),  // 3
-            new THREE.Vector3(0, 0, -1)  // 4
-        ];
+        this.isSpeed = false; // Default speed
+        this.palette = ["#EAA14D", "#E05A47", "#4D9BEA", "#5FB376", "#D869A8", "#F2C94C", "#9B51E0", "#FFFFFF"];
+        this.faceNormals = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)];
         this.faceValues = [1, 6, 2, 5, 3, 4];
-
         this.init();
     }
-
+    setSpeed(isSpeed) {
+        this.isSpeed = isSpeed;
+    }
     init() {
         const width = this.container.clientWidth || 600;
         const height = this.container.clientHeight || 400;
         const aspect = width / height;
         const FRUSTUM = 20;
-
         this.scene = new THREE.Scene();
-
-        // Orthographic camera for that arcade look from the CodePen
-        this.camera = new THREE.OrthographicCamera(
-            -FRUSTUM * aspect / 2, FRUSTUM * aspect / 2,
-            FRUSTUM / 2, -FRUSTUM / 2,
-            1, 1000
-        );
+        this.camera = new THREE.OrthographicCamera(-FRUSTUM * aspect / 2, FRUSTUM * aspect / 2, FRUSTUM / 2, -FRUSTUM / 2, 1, 1000);
         this.camera.position.set(40, 40, 40);
         this.camera.lookAt(0, 0, 0);
-
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.renderer.domElement.style.touchAction = 'none';
         this.container.appendChild(this.renderer.domElement);
-
         this.world = new CANNON.World();
-        this.world.gravity.set(0, -200, 0); // Much stronger gravity for "snappy" feel
+        this.world.gravity.set(0, -200, 0);
         this.world.allowSleep = true;
 
+        // Floor
         const floorMat = new CANNON.Material();
         const floorBody = new CANNON.Body({ mass: 0, material: floorMat });
         floorBody.addShape(new CANNON.Plane());
         floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
         this.world.addBody(floorBody);
 
+        // Walls
         const wallMat = new CANNON.Material();
-        const wallDist = 12;
         const createWall = (x, z, rot) => {
             const body = new CANNON.Body({ mass: 0, material: wallMat });
             body.addShape(new CANNON.Plane());
@@ -878,10 +946,8 @@ class Dice3DManager {
             body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rot);
             this.world.addBody(body);
         };
-        createWall(wallDist, 0, -Math.PI / 2);
-        createWall(-wallDist, 0, Math.PI / 2);
-        createWall(0, -wallDist, 0);
-        createWall(0, wallDist, Math.PI);
+        createWall(12, 0, -Math.PI / 2); createWall(-12, 0, Math.PI / 2);
+        createWall(0, -12, 0); createWall(0, 12, Math.PI);
 
         this.diceMat = new CANNON.Material();
         this.world.addContactMaterial(new CANNON.ContactMaterial(floorMat, this.diceMat, { friction: 0.2, restitution: 0.4 }));
@@ -893,54 +959,31 @@ class Dice3DManager {
         this.scene.add(dir);
 
         this.animate();
-
         window.addEventListener('resize', () => {
-            const w = this.container.clientWidth;
-            const h = this.container.clientHeight;
-            const asp = w / h;
-            this.camera.left = -FRUSTUM * asp / 2;
-            this.camera.right = FRUSTUM * asp / 2;
-            this.camera.top = FRUSTUM / 2;
-            this.camera.bottom = -FRUSTUM / 2;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(w, h);
+            const w = this.container.clientWidth; const h = this.container.clientHeight; const asp = w / h;
+            this.camera.left = -FRUSTUM * asp / 2; this.camera.right = FRUSTUM * asp / 2;
+            this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h);
         });
     }
-
     createDiceTexture(number, color = "#ffffff") {
         const size = 256;
         const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = size; canvas.height = size;
         const ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = color;
-        ctx.fillRect(0, 0, size, size);
-
+        ctx.fillStyle = color; ctx.fillRect(0, 0, size, size);
         const isWhite = (color.toLowerCase() === "#ffffff" || color.toLowerCase() === "white");
         ctx.fillStyle = isWhite ? "#E03E3E" : "#ffffff";
         if (number !== 1 && number !== 4 && isWhite) ctx.fillStyle = "#331e18";
-
-        const dot = (x, y, r) => {
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            ctx.fill();
-        };
-
-        const c = size / 2, q1 = size / 4, q3 = size * 3 / 4;
-        const dotSize = 25;
-        const bigDot = 35;
-
-        if (number === 1) dot(c, c, bigDot);
-        else if (number === 2) { dot(q1, q1, dotSize); dot(q3, q3, dotSize); }
-        else if (number === 3) { dot(q1, q1, dotSize); dot(c, c, dotSize); dot(q3, q3, dotSize); }
-        else if (number === 4) { dot(q1, q1, dotSize); dot(q3, q1, dotSize); dot(q1, q3, dotSize); dot(q3, q3, dotSize); }
-        else if (number === 5) { dot(q1, q1, dotSize); dot(q3, q1, dotSize); dot(c, c, dotSize); dot(q1, q3, dotSize); dot(q3, q3, dotSize); }
-        else if (number === 6) { dot(q1, q1, dotSize); dot(q3, q1, dotSize); dot(q1, c, dotSize); dot(q3, c, dotSize); dot(q1, q3, dotSize); dot(q3, q3, dotSize); }
-
+        const dot = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+        const c = size / 2, q1 = size / 4, q3 = size * 3 / 4, d = 25, bd = 35;
+        if (number === 1) dot(c, c, bd);
+        else if (number === 2) { dot(q1, q1, d); dot(q3, q3, d); }
+        else if (number === 3) { dot(q1, q1, d); dot(c, c, d); dot(q3, q3, d); }
+        else if (number === 4) { dot(q1, q1, d); dot(q3, q1, d); dot(q1, q3, d); dot(q3, q3, d); }
+        else if (number === 5) { dot(q1, q1, d); dot(q3, q1, d); dot(c, c, d); dot(q1, q3, d); dot(q3, q3, d); }
+        else if (number === 6) { dot(q1, q1, d); dot(q3, q1, d); dot(q1, c, d); dot(q3, c, d); dot(q1, q3, d); dot(q3, q3, d); }
         return new THREE.CanvasTexture(canvas);
     }
-
     roll(values) {
         return new Promise(resolve => {
             this.targetValues = values;
@@ -950,107 +993,85 @@ class Dice3DManager {
             this.isRunning = true;
             this.rollStartTime = Date.now();
 
-            setTimeout(() => { if (this.isRunning) this.stopRoll(); }, 1200);
+            // Adjust duration based on speed
+            const duration = this.isSpeed ? 400 : 1200;
+            setTimeout(() => { if (this.isRunning) this.stopRoll(); }, duration);
         });
     }
-
     clearDice() {
         this.diceObjects.forEach(obj => { this.scene.remove(obj.mesh); this.world.removeBody(obj.body); });
         this.diceObjects = [];
     }
-
     spawnDice(values) {
         const theme = document.body.getAttribute('data-dice-theme') || 'classic';
         const geom = new RoundedBoxGeometry(2.2, 2.2, 2.2, 4, 0.4);
-
         values.forEach((val, i) => {
             let diceColor = "#ffffff";
             if (theme === 'classic') diceColor = this.palette[i % this.palette.length];
             else if (theme === 'gold') diceColor = "#ffd700";
             else if (theme === 'dark') diceColor = "#111111";
-
             const materials = [];
-            for (let j = 1; j <= 6; j++) {
-                materials.push(new THREE.MeshStandardMaterial({
-                    map: this.createDiceTexture(j, diceColor),
-                    roughness: 0.3,
-                    metalness: theme === 'gold' ? 0.7 : 0.1
-                }));
-            }
+            for (let j = 1; j <= 6; j++) materials.push(new THREE.MeshStandardMaterial({ map: this.createDiceTexture(j, diceColor) }));
             const matArray = [materials[0], materials[5], materials[1], materials[4], materials[2], materials[3]];
-
             const mesh = new THREE.Mesh(geom, matArray);
             this.scene.add(mesh);
+            const body = new CANNON.Body({ mass: 5, shape: new CANNON.Box(new CANNON.Vec3(1.1, 1.1, 1.1)), material: this.diceMat, position: new CANNON.Vec3((Math.random() - 0.5) * 5, 15 + i * 2, (Math.random() - 0.5) * 5) });
 
-            const shape = new CANNON.Box(new CANNON.Vec3(1.1, 1.1, 1.1));
-            const body = new CANNON.Body({
-                mass: 5,
-                shape: shape,
-                material: this.diceMat,
-                position: new CANNON.Vec3((Math.random() - 0.5) * 5, 15 + i * 2, (Math.random() - 0.5) * 5)
-            });
+            // Speed mode = faster initial velocity? No, just stop sooner.
+            // But maybe slight boost looks better.
+            const velMult = this.isSpeed ? 1.5 : 1.0;
 
-            body.velocity.set((Math.random() - 0.5) * 20, -60, (Math.random() - 0.5) * 20);
-            body.angularVelocity.set((Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40);
-
+            body.velocity.set((Math.random() - 0.5) * 20 * velMult, -60 * velMult, (Math.random() - 0.5) * 20 * velMult);
+            body.angularVelocity.set((Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult);
             this.world.addBody(body);
             this.diceObjects.push({ mesh, body, targetVal: val });
         });
     }
-
     checkStopped() {
         if (!this.isRunning) return;
-        let allStopped = true;
-        this.diceObjects.forEach(obj => {
-            if (obj.body.velocity.lengthSquared() > 0.2 || obj.body.angularVelocity.lengthSquared() > 0.2) allStopped = false;
-        });
-        if (allStopped && Date.now() - this.rollStartTime > 500) this.stopRoll();
-    }
 
+        let allStopped = true;
+        // In speed mode, we care less about physics stop, we force stop anyway.
+        // But if they naturally stop, great.
+        this.diceObjects.forEach(obj => { if (obj.body.velocity.lengthSquared() > 0.2) allStopped = false; });
+
+        const minTime = this.isSpeed ? 200 : 500;
+
+        if (allStopped && Date.now() - this.rollStartTime > minTime) this.stopRoll();
+    }
     stopRoll() {
         if (!this.isRunning) return;
         this.isRunning = false;
         this.diceObjects.forEach(obj => { this.alignDie(obj); obj.body.sleep(); });
-        if (this.resolveRoll) {
-            const res = this.resolveRoll;
-            this.resolveRoll = null;
-            setTimeout(res, 300);
-        }
-    }
 
+        const delay = this.isSpeed ? 100 : 300;
+        if (this.resolveRoll) { const res = this.resolveRoll; this.resolveRoll = null; setTimeout(res, delay); }
+    }
     alignDie(obj) {
         const bodyQ = obj.body.quaternion;
-        const targetVal = obj.targetVal;
-        let bestIndex = 0;
-        let maxUp = -1;
+        let bestIndex = 0, maxUp = -1;
         for (let i = 0; i < this.faceNormals.length; i++) {
             const normal = this.faceNormals[i].clone().applyQuaternion(bodyQ);
             if (normal.y > maxUp) { maxUp = normal.y; bestIndex = i; }
         }
-        let targetIndex = this.faceValues.indexOf(targetVal);
+        let targetIndex = this.faceValues.indexOf(obj.targetVal);
         if (targetIndex !== bestIndex) {
-            const from = this.faceNormals[targetIndex];
-            const to = this.faceNormals[bestIndex];
-            const correction = new THREE.Quaternion().setFromUnitVectors(from, to);
+            const correction = new THREE.Quaternion().setFromUnitVectors(this.faceNormals[targetIndex], this.faceNormals[bestIndex]);
             obj.mesh.quaternion.copy(bodyQ).multiply(correction);
-        } else {
-            obj.mesh.quaternion.copy(bodyQ);
-        }
+        } else { obj.mesh.quaternion.copy(bodyQ); }
     }
-
     animate() {
         requestAnimationFrame(() => this.animate());
         if (this.isRunning) {
+            // Speed up physics in speed mode
+            const timeStep = this.isSpeed ? 1 / 30 : 1 / 60;
+            // actually faster simulation requires larger timestep? 
+            // No, just normal step.
             this.world.step(1 / 60);
-            this.diceObjects.forEach(obj => {
-                obj.mesh.position.copy(obj.body.position);
-                obj.mesh.quaternion.copy(obj.body.quaternion);
-            });
+            this.diceObjects.forEach(obj => { obj.mesh.position.copy(obj.body.position); obj.mesh.quaternion.copy(obj.body.quaternion); });
             this.checkStopped();
         }
         this.renderer.render(this.scene, this.camera);
     }
 }
-
-// Instantiate immediately since we are a module script
 window.farkle = new FarkleClient();

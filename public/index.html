@@ -26,7 +26,34 @@
 </head>
 
 <body>
-
+    <div id="global-error-display" style="
+        display: none; 
+        position: fixed; 
+        top: 0; left: 0; right: 0; 
+        background: #7f1d1d; 
+        color: white; 
+        padding: 1rem; 
+        z-index: 9999; 
+        font-family: monospace; 
+        font-size: 12px;
+        white-space: pre-wrap;
+    "></div>
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const el = document.getElementById('global-error-display');
+            if (el) {
+                el.style.display = 'block';
+                el.textContent += `Error: ${msg}\nAt: ${url}:${line}:${col}\n\n`;
+            }
+        };
+        window.addEventListener('unhandledrejection', function (event) {
+            const el = document.getElementById('global-error-display');
+            if (el) {
+                el.style.display = 'block';
+                el.textContent += `Promise Rejection: ${event.reason}\n\n`;
+            }
+        });
+    </script>
 
     <div id="app">
         <div id="bg-dice-container"></div>
@@ -61,7 +88,7 @@
             </div>
 
             <div class="dice-arena">
-                <div id="three-canvas-container"></div>div>
+                <div id="three-canvas-container"></div>
                 <div id="dice-container" class="dice-container">
                     <!-- Dice will be injected here (2D fallback/selection) -->
                 </div>
@@ -85,26 +112,21 @@
             <div class="modal-content">
                 <h2>Rules</h2>
                 <div class="rules-text">
-                    <p><strong>Scoring:</strong></p>
-                    <ul>
-                        <li>Single 5: 50</li>
-                        <li>Single 1: 100</li>
-                        <li>Three 1s: 1000</li>
-                        <li>Three 2s: 200</li>
-                        <li>Three 3s: 300</li>
-                        <li>Three 4s: 400</li>
-                        <li>Three 5s: 500</li>
-                        <li>Three 6s: 600</li>
-                        <li>Four of a kind: 2x Triple value</li>
-                        <li>Five of a kind: 3x Triple value</li>
-                        <li>Six of a kind: 4x Triple value</li>
-                    </ul>
-                    <p><strong>Gameplay:</strong></p>
-                    <p>Roll the dice. Select scoring dice to accumulate points. You must select at least one scoring die
-                        after each roll to continue or bank.</p>
-                    <p><strong>Hot Dice:</strong> If you use all 6 dice, you can roll all 6 again!</p>
-                    <p><strong>Farkle:</strong> If you roll and get no scoring dice, you lose your round score.</p>
-                    <p><strong>Win:</strong> First to 10,000 points. The other player gets one last turn.</p>
+                    <p><strong>Farkle Rules Summary</strong></p>
+                    <p>Begin your turn by rolling all six dice. Check to see if you have rolled any scoring dice or
+                        combinations. Set aside any scoring dice you wish, but you must set aside at least one scoring
+                        die if possible.</p>
+                    <p>After each roll, you may reroll all the dice that have not been set aside or you can choose to
+                        bank any accumulated points and end your turn.</p>
+                    <p>If all six dice have been set aside for scoring (Hot Dice), you can use them all to continue
+                        rolling as normal or you can bank your points and end your turn.</p>
+                    <p>You farkle if you roll the dice and score no points with any of them. This ends your turn
+                        immediately and all of your points gained so far this turn are lost.</p>
+                    <p>At the end of your turn, your score is banked. The first player to reach the winning score
+                        (Standard: 10,000) triggers the final round.</p>
+                    <br>
+                    <p style="color: var(--primary);"><em>Note: Different tables may have different rules (e.g. High
+                            Stakes, Welfare Mode). Check the table description!</em></p>
                 </div>
                 <button class="btn close-modal">Close</button>
             </div>
@@ -117,17 +139,31 @@
                     <div class="tagline">READY TO ROLL?</div>
                 </div>
 
-                <button id="start-game-btn" class="btn primary" disabled
-                    style="width: 100%; padding: 1.5rem; font-size: 1.5rem; opacity: 0.5; cursor: not-allowed;">Connecting...</button>
                 <div id="connection-debug"
                     style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; text-align: center;">
                     Initializing...</div>
 
+                <div id="mode-selection" style="display:none; text-align: center; margin-bottom: 2rem;">
+                    <p style="color: var(--text-muted); margin-bottom: 1rem;">Select Experience</p>
+                    <div style="display: flex; gap: 1rem; justify-content: center;">
+                        <button id="mode-casual-btn" class="btn secondary" style="min-width: 120px;">
+                            <span style="display:block; font-size: 1.2rem;">☕</span>
+                            Casual
+                        </button>
+                        <button id="mode-speed-btn" class="btn secondary" style="min-width: 120px;">
+                            <span style="display:block; font-size: 1.2rem;">⚡</span>
+                            Speed Run
+                        </button>
+                    </div>
+                </div>
+
                 <div id="room-list-container" class="room-grid"
-                    style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; width: 100%;">
+                    style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; width: 100%; display: none;">
                     <p style="color:var(--text-muted); font-size: 0.9rem; text-align: center;">Loading tables...</p>
                     <!-- Room List will be injected here -->
                 </div>
+
+                <button id="start-game-btn" class="btn primary" disabled style="display: none;"></button>
             </div>
         </div>
 
