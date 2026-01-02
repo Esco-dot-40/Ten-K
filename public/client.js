@@ -394,7 +394,10 @@ class FarkleClient {
                 const val = e.target.value;
                 document.body.setAttribute('data-dice-theme', val);
                 localStorage.setItem('farkle-dice-theme', val);
-                if (this.dice3D) this.dice3D.materialCache.clear();
+                if (this.dice3D) {
+                    this.dice3D.materialCache.clear();
+                    this.dice3D.updateDiceMaterials();
+                }
             });
         }
     }
@@ -1276,7 +1279,9 @@ class Dice3DManager {
             let diceColor = "#ffffff";
             if (theme === 'classic') diceColor = this.palette[i % this.palette.length];
             else if (theme === 'gold') diceColor = "#ffd700";
+
             else if (theme === 'dark') diceColor = "#111111";
+            else if (theme === 'neon') diceColor = "#00f2ff";
 
             const matArray = this.getMaterialsForColor(diceColor);
 
@@ -1339,6 +1344,24 @@ class Dice3DManager {
             this.checkStopped();
         }
         this.renderer.render(this.scene, this.camera);
+    }
+    updateDiceMaterials() {
+        // Re-apply materials to all existing dice based on current theme
+        const theme = document.body.getAttribute('data-dice-theme') || 'classic';
+
+        this.diceObjects.forEach((obj, i) => {
+            let diceColor = "#ffffff";
+            if (theme === 'classic') diceColor = this.palette[i % this.palette.length];
+            else if (theme === 'gold') diceColor = "#ffd700";
+            else if (theme === 'dark') diceColor = "#111111";
+            else if (theme === 'neon') diceColor = "#00f2ff";
+
+            const matArray = this.getMaterialsForColor(diceColor);
+
+            // Dispose old material? (Three.js memory management)
+            // Ideally yes, but here we just swap references. cache handles reuse.
+            obj.mesh.material = matArray;
+        });
     }
 }
 window.farkle = new FarkleClient();
