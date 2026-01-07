@@ -402,7 +402,12 @@ io.on('connection', (socket) => {
             const requestedRoom = data?.roomCode;
             const isSpectator = data?.spectator === true;
 
-            let roomCode = requestedRoom && games.has(requestedRoom) ? requestedRoom : 'Classic 1';
+            if (!requestedRoom || !games.has(requestedRoom)) {
+                console.log(`[Join] Rejecting join request: No valid room code provided.`);
+                socket.emit('error', 'Please select a room first');
+                return;
+            }
+            let roomCode = requestedRoom;
             let game = games.get(roomCode);
 
             // Checking if already in as player (Reconnect Logic)

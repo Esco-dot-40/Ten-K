@@ -170,8 +170,12 @@ class FarkleClient {
         try {
             this.roomCode = null;
             this.roomId = null;
-            // Restore Room Code if available for auto-rejoin
-            this.roomCode = sessionStorage.getItem('farkle-room-code') || null;
+
+            // Priority: URL param > Session Storage
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlRoom = urlParams.get('room');
+            this.roomCode = urlRoom || sessionStorage.getItem('farkle-room-code') || null;
+
             this.playerId = null;
             this.gameState = null;
             this.gameState = null;
@@ -222,7 +226,11 @@ class FarkleClient {
                 chatCloseBtn: document.getElementById('chat-close-btn'),
                 chatInput: document.getElementById('chat-input'),
                 chatSendBtn: document.getElementById('chat-send-btn'),
-                chatMessages: document.getElementById('chat-messages')
+                chatMessages: document.getElementById('chat-messages'),
+                roomDisplay: document.getElementById('room-display'),
+                spectatorDisplay: document.getElementById('spectator-display'),
+                gameInfoBar: document.getElementById('game-info-bar'),
+                leaveText: document.getElementById('leave-text')
             };
 
             // Hook up start button
@@ -247,6 +255,7 @@ class FarkleClient {
                     modeSelection.style.display = 'none';
                     roomList.style.display = 'grid';
                     this.socket.emit('get_room_list');
+                    history.pushState({ view: 'room-list', mode: 'speed' }, "", "?view=rooms&mode=speed");
                 });
                 casualBtn.addEventListener('click', () => {
                     this.isSpeedMode = false;
@@ -254,6 +263,7 @@ class FarkleClient {
                     modeSelection.style.display = 'none';
                     roomList.style.display = 'grid';
                     this.socket.emit('get_room_list');
+                    history.pushState({ view: 'room-list', mode: 'casual' }, "", "?view=rooms&mode=casual");
                 });
             }
 
@@ -261,6 +271,7 @@ class FarkleClient {
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
             try { this.initSimpleBackground(); } catch (e) { console.error("Background Init Failed", e); }
+            try { this.initHistory(); } catch (e) { console.error("History Init Failed", e); }
             this.debugLog("Modules initialized");
             // Fall through to Discord Init immediately
 
@@ -400,6 +411,36 @@ class FarkleClient {
                 }
             });
         }
+    }
+
+    initHistory() {
+        window.onpopstate = (event) => {
+            const state = event.state;
+            if (!state) {
+                // Back to mode selection
+                if (this.roomCode) {
+                    this.leaveGame(true);
+                } else {
+                    document.getElementById('room-list-container').style.display = 'none';
+                    document.getElementById('mode-selection').style.display = 'block';
+                    this.ui.setupModal.classList.remove('hidden');
+                }
+            } else if (state.view === 'room-list') {
+                if (this.roomCode) {
+                    this.leaveGame(true);
+                }
+                this.isSpeedMode = state.mode === 'speed';
+                document.getElementById('mode-selection').style.display = 'none';
+                document.getElementById('room-list-container').style.display = 'grid';
+                this.ui.setupModal.classList.remove('hidden');
+                this.socket.emit('get_room_list');
+            } else if (state.view === 'game') {
+                // Rejoin? If we have roomCode in state
+                if (state.roomCode && state.roomCode !== this.roomCode) {
+                    this.joinRoom(state.roomCode, false, true);
+                }
+            }
+        };
     }
 
     styleHexToRgba(hex, alpha) {
@@ -573,6 +614,13 @@ class FarkleClient {
             else this.showFeedback("Joined Room!", "success");
 
             this.renderControls();
+
+            // Update UI
+            if (this.ui.roomDisplay) this.ui.roomDisplay.textContent = `Table: ${this.roomCode}`;
+            if (this.ui.gameInfoBar) this.ui.gameInfoBar.style.display = 'flex';
+            if (this.ui.leaveText) this.ui.leaveText.style.display = 'inline';
+            if (this.ui.leaveBtn) this.ui.leaveBtn.style.width = 'auto';
+            if (this.ui.leaveBtn) this.ui.leaveBtn.style.padding = '0 12px';
         });
 
         this.socket.on('game_state_update', (state) => {
@@ -580,6 +628,9 @@ class FarkleClient {
                 this.pendingState = state;
             } else {
                 this.updateGameState(state);
+            }
+            if (state && this.ui.spectatorDisplay) {
+                this.ui.spectatorDisplay.textContent = `Spectators: ${state.spectatorCount || 0}`;
             }
         });
 
@@ -642,12 +693,24 @@ class FarkleClient {
         backRow.style.marginBottom = "10px";
         const backBtn = document.createElement('button');
         backBtn.className = 'btn secondary small';
-        backBtn.textContent = '← Back to Modes';
+        backBtn.innerHTML = '<span>←</span> <span>Back to Modes</span>';
+        backBtn.style.padding = '0 20px';
+        backBtn.style.gap = '8px';
         backBtn.onclick = () => {
-            container.style.display = 'none';
-            document.getElementById('mode-selection').style.display = 'block';
+            history.back();
         };
         backRow.appendChild(backBtn);
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'btn primary small';
+        refreshBtn.innerHTML = '<span>↻</span> <span>Refresh</span>';
+        refreshBtn.style.marginLeft = '10px';
+        refreshBtn.style.padding = '0 20px';
+        refreshBtn.style.gap = '8px';
+        refreshBtn.onclick = () => {
+            this.socket.emit('get_room_list');
+        };
+        backRow.appendChild(refreshBtn);
         container.appendChild(backRow);
 
         if (rooms.length === 0) {
@@ -722,13 +785,16 @@ class FarkleClient {
         });
     }
 
-    joinRoom(roomCode, asSpectator = false) {
+    joinRoom(roomCode, asSpectator = false, fromHistory = false) {
         this.debugLog(`Joining ${roomCode} (${asSpectator ? 'Spectating' : 'Playing'})...`);
 
         let finalName = this.playerName;
-        // removed manual input check
         localStorage.setItem('farkle-username', finalName);
-        sessionStorage.setItem('farkle-room-code', roomCode); // Save for refresh
+        sessionStorage.setItem('farkle-room-code', roomCode);
+
+        if (!fromHistory) {
+            history.pushState({ view: 'game', roomCode: roomCode }, "", `?room=${roomCode}`);
+        }
 
         this.socket.emit('join_game', { roomCode: roomCode, spectator: asSpectator, reconnectToken: this.reconnectToken, name: finalName });
     }
@@ -738,8 +804,10 @@ class FarkleClient {
         this.socket.emit('join_game');
     }
 
-    leaveGame() {
-        if (!confirm("Are you sure you want to leave the table?")) return;
+    leaveGame(fromPopState = false) {
+        if (!fromPopState) {
+            if (!confirm("Are you sure you want to leave the table?")) return;
+        }
 
         this.debugLog("Leaving Game...");
 
@@ -758,7 +826,11 @@ class FarkleClient {
         // 3. Reset UI to Lobby
         this.ui.setupModal.classList.remove('hidden');
         document.getElementById('mode-selection').style.display = 'block';
-        document.getElementById('room-list-container').style.display = 'none'; // Reset to mode select
+        document.getElementById('room-list-container').style.display = 'none';
+
+        if (!fromPopState) {
+            history.pushState(null, "", window.location.pathname);
+        }
 
         // Clear Game Board UI
         if (this.ui.playerZonesContainer) this.ui.playerZonesContainer.innerHTML = '';
@@ -771,6 +843,13 @@ class FarkleClient {
 
         // Refresh Room List (will happen on mode select, but good to ensure socket is ready)
         // this.socket.emit('get_room_list'); // Done when clicking mode
+
+        if (this.ui.gameInfoBar) this.ui.gameInfoBar.style.display = 'none';
+        if (this.ui.leaveText) this.ui.leaveText.style.display = 'none';
+        if (this.ui.leaveBtn) {
+            this.ui.leaveBtn.style.width = '44px';
+            this.ui.leaveBtn.style.padding = '0';
+        }
     }
 
     canInteract() {
@@ -1159,7 +1238,7 @@ class Dice3DManager {
         const width = this.container.clientWidth || 600;
         const height = this.container.clientHeight || 400;
         const aspect = width / height;
-        const FRUSTUM = 20;
+        const FRUSTUM = 26;
         this.scene = new THREE.Scene();
         this.camera = new THREE.OrthographicCamera(-FRUSTUM * aspect / 2, FRUSTUM * aspect / 2, FRUSTUM / 2, -FRUSTUM / 2, 1, 1000);
         this.camera.position.set(40, 40, 40);
@@ -1203,6 +1282,7 @@ class Dice3DManager {
         this.animate();
         window.addEventListener('resize', () => {
             const w = this.container.clientWidth; const h = this.container.clientHeight; const asp = w / h;
+            const FRUSTUM = 26;
             this.camera.left = -FRUSTUM * asp / 2; this.camera.right = FRUSTUM * asp / 2;
             this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h);
         });
