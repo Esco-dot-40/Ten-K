@@ -304,6 +304,7 @@ class GameState {
     nextTurn() {
         let attempts = 0;
         let p;
+        const resultLoopLimit = this.players.length + 10;
 
         do {
             this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
@@ -311,32 +312,22 @@ class GameState {
 
             if (!p.connected) {
                 p.missedTurns = (p.missedTurns || 0) + 1;
-                console.log(`[Game ${this.roomCode}] Player ${p.name} missed turn ${p.missedTurns}/3`);
+                console.log(`[Game ${this.roomCode}] Player ${p.name} missed turn ${p.missedTurns}`);
+                // Disabling auto-kick slice to prevent index shifts/random movement issues
+                /* 
                 if (p.missedTurns >= 3) {
-                    console.log(`[Game ${this.roomCode}] Kicking ${p.name} for inactivity.`);
-                    // Remove from array. 
-                    // Adjust index if needed since we are modifying array while iterating? 
-                    // We are just rotating index, so splicing at index implies current index is now next player.
-                    // But we are in a loop looking for connected player.
-                    this.players.splice(this.currentPlayerIndex, 1);
-                    // Decrement index so next loop increment hits the correct next player
-                    this.currentPlayerIndex--;
-
-                    // Check if empty
-                    if (this.players.length === 0) {
-                        this.gameStatus = 'waiting';
-                        this.resetRound();
-                        return;
-                    }
-                }
+                    console.log(`[Game ${this.roomCode}] Marking ${p.name} as inactive/skipped.`);
+                    // Don't splice. Just ignore.
+                } 
+                */
             } else {
-                // If connected, reset missed turns? usually yes.
                 p.missedTurns = 0;
             }
 
             attempts++;
-        } while ((!p || !p.connected) && attempts < this.players.length + 5);
-        // +5 safety buffer for splicing logic
+        } while ((!p || !p.connected) && attempts < resultLoopLimit);
+        // Safety break
+
 
         if (this.players.length < 2 && this.gameStatus === 'playing') {
             // Not enough players to continue? Or just wait?
@@ -467,6 +458,9 @@ io.on('connection', (socket) => {
             existingPlayer = game.players.find(p => p.id === socket.id);
             if (existingPlayer) {
                 existingPlayer.connected = true;
+                if (data?.name && data.name !== existingPlayer.name) {
+                    existingPlayer.name = data.name; // Update name (e.g. late Discord auth)
+                }
                 socket.join(roomCode);
                 socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
                 io.to(roomCode).emit('game_state_update', game.getState());

@@ -20,8 +20,8 @@ export const DEFAULT_RULES = {
     fiveStraight: 1200, // Custom
 
     // Feature Toggles (Game Modes/Variants can override these)
-    enableThreePairs: true,
-    enableTwoTriplets: true,
+    enableThreePairs: false,
+    enableTwoTriplets: false,
     enableFullHouse: false, // Not standard-standard, but requested. User said '3-of-a-kind + pair 3-of-a-kind value + 250'
     enableSixOnesInstantWin: false, // User mentioned 'Instant win' as option
     enable4Straight: false,
@@ -97,11 +97,6 @@ export function calculateScore(dice, rules = DEFAULT_RULES) {
     }
 
     // --- Standard Counting Score ---
-    // If no special 6-dice combo, we sum up individual sets.
-    // Note: This logic assumes the user selected a valid set. 
-    // It does NOT auto-partition. It scores the 'dice' array passed in.
-    // If user sends [1, 1, 1, 5], we score 1050.
-
     let score = 0;
 
     for (let face = 1; face <= 6; face++) {
@@ -123,101 +118,31 @@ export function calculateScore(dice, rules = DEFAULT_RULES) {
             if (count === 3) {
                 score += tripleValue;
             } else if (count === 4) {
-                score += rules.fourOfAKind || (tripleValue * 2);
-                // Wait, user provided specific 1000 for 4-kind. 
-                // But standard is often 2x triple. 
-                // If the user's table says '4 of a Kind 1000', that conflicts with '2x 3-of-a-kind'.
-                // I will use logic: If specific rule value exists, use it?
-                // Actually the user provided a LIST of options. '1000', '2000', '2x...'.
-                // I will use the default I set (1000).
-
-                // However, for 1s: Triple is 1000. 4-kind of 1s could be 2000 or 1000? 
-                // Usually 4-of-a-kind applies to the whole set.
-                // Exception: if I have four 1s, is it 1000 + 100? or 4-kind score?
-                // In Farkle, 4-of-a-kind is a specific combo. 
-                // Use the rules.fourOfAKind if defined, else logical fallback.
-
-                // Let's interpret the request: '4 of a Kind 1000'. 
-                // This implies flat 1000 for ANY 4-of-a-kind? Or maybe 1000 for 1s, etc?
-                // Usually 4-kind is dynamic. 
-                // The provided text: '4 of a Kind 1000'. This might be the column for 'Standard'.
-                // If so, 4-of-a-kind 1s = 1000? That's barely better than 3 (1000) + 1 (100).
-                // Actually it's WORSE. 111 (1000) + 1 (100) = 1100.
-                // So likely '1000' is a typo in my parsing or it means something else.
-                // In 'Standard', 4-of-a-kind is often 2x Triple.
-                // I'll stick to 'tripleValue * (count - 2)' or similar multiplier logic if strict rules aren't forced.
-                // But let's look at the table again:
-                // '3 Pairs 1500'
-                // '4 of a Kind 1000'
-                // This implies a flat bonus?
-                // I will implement the most common variants:
-                // 3: 1x
-                // 4: 2x
-                // 5: 3x (or rule value)
-                // 6: 4x (or rule value)
-
-                // Let's treat count >= 3 as:
-                // Base: tripleValue.
-                // Multiplier: 2^(count-3)? No.
-                // 3 -> 1x
-                // 4 -> 2x
-                // 5 -> 3x or 4x?
-                // 6 -> 4x or 8x?
-
-                // User text:
-                // 4 of a Kind 1000 (Option A) ... 2x 3-of-kind (Option C)
-                // I'll assume 'Standard' column is the first one. 
-                // So 4-kind = 1000. 5-kind = 2000. 6-kind = 3000.
-                // This seems like a flat score regardless of face, EXCEPT maybe 1s?
-                // If I have 4 2s: 1000 pts. (vs 200 for 3). huge upgrade.
-                // If I have 4 1s: 1000 pts. (vs 1100 for 3+1). Downgrade.
-                // I will implement a 'Max' check? Or just follow the rule strictly.
-                // If strict rule says 4-kind = 1000, then 4 ones = 1000.
-
-                // I'll fallback to: if flat value is set > 0, use it. But for 1s, check if (1000 + 100 > rule).
-                // Actually standard Farkle usually sums sets.
-                // I will proceed with:
-                // - 1s and 5s are added individually if they are not part of a larger set?
-                // - No, calculateScore receives a SET of dice intended to be scored TOGETHER.
-                // - So if I pass [1,1,1,1], I score it as 4-of-a-kind.
-                // - If I wanted 3-of-a-kind + 1, I would select [1,1,1] (score 1000) then [1] (score 100).
-
-                // So my logic just needs to identify the 'Type' of the set passed.
-                // But players usually select ALL scoring dice. [1,1,1,1].
-                // Does the game automatically partition [1,1,1,1] into 111 + 1 (1100) or 1111 (1000)?
-                // Usually the game engine greedily picks the best, PREVENTING valid lower scores?
-                // Or does it treat the selection as a requested combo?
-                // In my isScoringSelection logic, I just cared if it's valid.
-                // calculateScore returns the value.
-                // I will implement a greedy 'best score' for the set.
-
-                if (face === 1 && (1000 + (count - 3) * 100) > rules.fourOfAKind) {
-                    // 1s are special, usually computed as 1000 + extra 1s unless 4-of-a-kind is HUGE.
-                    // But if rules.fourOfAKind is 1000, then 111+1 (1100) is better.
-                    score += (tripleValue + (count - 3) * rules.single1);
-                } else {
-                    if (count === 4) score += rules.fourOfAKind;
-                    else if (count === 5) score += rules.fiveOfAKind;
-                    else if (count === 6) score += rules.sixOfAKind;
-                    else score += tripleValue; // Count is 3
-                }
-
+                // User requested 4 ones = 2000. 
+                // Standard variant: 4-of-a-kind is 2x 3-of-a-kind.
+                score += tripleValue * 2;
+            } else if (count === 5) {
+                // Standard variant: 5-of-a-kind is 3x 3-of-a-kind (or 4x? or 2x 4-kind?)
+                // Let's go with 3x (3000 for 1s) or 4x (4000)?
+                // Usually it keeps doubling: 1000 -> 2000 -> 4000 -> 8000
+                // Or linear: 1000 -> 2000 -> 3000
+                // Given "4 is 2000", doubling seems safest for high stakes feel.
+                score += tripleValue * 4;
+            } else if (count === 6) {
+                // 6-of-a-kind is usually instant win or 3000 flat rule, 
+                // but if we fall through here (no rule.sixOfAKind matched earlier??)
+                // Actually rule.sixOfAKind (3000) is checked at the TOP.
+                // So we likely won't reach here for count 6 unless distinct != 1??
+                // Wait, distinct check loops faces. If count[face] == 6, distinct IS 1.
+                // The top check `if (counts[i] === 6) return rules.sixOfAKind;` handles it.
+                // So this block is redundant for 6, but good for safety.
+                score += tripleValue * 8;
             }
         } else {
-            // Count < 3
             if (face === 1) score += count * rules.single1;
             else if (face === 5) score += count * rules.single5;
-            // 2,3,4,6 yield 0 if count < 3
         }
     }
-
-    // Toxic Twos Check (If this function is just calculating score, maybe return 0? 
-    // But Toxic Twos usually wipes the whole TURN, not just the roll.
-    // That needs to be handled in game logic, not just score calc.
-    // However, if the roll HAS Toxic Twos, this roll score is 0 and it triggers a wipe.
-    // I need to signal that. Maybe return -1? 
-    // Or let the game logic check the dice for Toxic Twos condition separate from score.)
-
     return score;
 
 }
