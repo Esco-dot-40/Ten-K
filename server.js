@@ -57,6 +57,75 @@ app.get('/api/admin/stats', (req, res) => {
     }
 });
 
+// --- Discord Auth API ---
+import { db } from './db.js';
+import 'dotenv/config';
+// Note: dotenv config is loaded here, ensuring env vars are available
+
+app.post('/api/token', async (req, res) => {
+    const { code } = req.body;
+
+    // Quick return for dev/mock mode
+    if (code === 'mock_code') return res.json({ access_token: 'mock', user: { id: 'mock', username: 'MockUser', global_name: 'Mock User' } });
+
+    if (!process.env.DISCORD_CLIENT_SECRET) {
+        console.error("Missing DISCORD_CLIENT_SECRET in .env");
+        return res.status(500).json({ error: "Server Configuration Error: Missing Client Secret" });
+    }
+
+    try {
+        // 1. Exchange Code for Access Token
+        const params = new URLSearchParams({
+            client_id: process.env.DISCORD_CLIENT_ID || '1317075677927768074',
+            client_secret: process.env.DISCORD_CLIENT_SECRET,
+            grant_type: 'authorization_code',
+            code,
+            // IMPORTANT: In embedded apps, redirect_uri usually needs to match 
+            // where the iframe is hosted. 
+            // For strict mode, use your configured endpoint in Dev Portal.
+            // We often infer it from the host to handle tunnel urls automatically.
+            // However, for embedded apps, usually it's null or specific.
+            // If this fails, user needs to check their Dev Portal "Redirects".
+            redirect_uri: `https://${req.headers.host}`
+            // Warning: If running mainly in Discord Activity, redirect_uri might need to be specific URL configured in portal.
+            // If it fails with 'invalid_grant', check this.
+        });
+
+        const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params,
+        });
+
+        const tokenData = await tokenResponse.json();
+
+        if (!tokenData.access_token) {
+            console.error("Token Exchange Failed:", tokenData);
+            return res.status(400).json({ error: 'Failed to exchange token', details: tokenData });
+        }
+
+        // 2. Fetch User Profile
+        const userResponse = await fetch('https://discord.com/api/users/@me', {
+            headers: { authorization: `Bearer ${tokenData.access_token}` },
+        });
+        const userData = await userResponse.json();
+
+        // 3. Upsert User into Database
+        await db.upsertUser(userData);
+
+        // Return everything to frontend
+        res.json({
+            access_token: tokenData.access_token,
+            user: userData,
+            scopes: tokenData.scope ? tokenData.scope.split(' ') : []
+        });
+
+    } catch (err) {
+        console.error("Auth Error:", err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 class GameState {
     constructor(roomCode, rules = DEFAULT_RULES) {
         this.roomCode = roomCode;

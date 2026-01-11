@@ -12,6 +12,7 @@
     "@discord/embedded-app-sdk": "^2.4.0",
     "cannon-es": "^0.20.0",
     "chart.js": "^4.5.1",
+    "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "geoip-lite": "^1.4.10",
     "gsap": "^3.14.2",

@@ -182,23 +182,35 @@ class FarkleClient {
             await this.discordSdk.ready();
             this.debugLog("Discord SDK Ready");
 
-            // Client-Side Auth Flow (Implicit Grant attempt)
-            // Use 'token' response_type to get access_token directly
-            const { access_token } = await this.discordSdk.commands.authorize({
+            // Client-Side Auth Flow (Auth Code Grant)
+            // Use 'code' to exchange on backend for token & user profile
+            const { code } = await this.discordSdk.commands.authorize({
                 client_id: DISCORD_CLIENT_ID,
-                response_type: "token",
+                response_type: "code",
                 state: "",
                 prompt: "none",
                 scope: ["identify", "guilds", "rpc.activities.write"]
             });
 
-            // Authenticate with the token
-            const response = await this.discordSdk.commands.authenticate({
-                access_token: access_token
+            // Authenticate with Backend
+            const backendRes = await fetch('/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
             });
 
-            if (response && response.user) {
-                this.playerName = response.user.global_name || response.user.username;
+            if (!backendRes.ok) throw new Error("Backend Auth Failed");
+
+            const authData = await backendRes.json();
+
+            // Now authenticate SDK with the returned access token so we can use SDK features
+            await this.discordSdk.commands.authenticate({
+                access_token: authData.access_token
+            });
+
+            if (authData.user) {
+                // Prioritize global_name, fallback to username on server-verified data
+                this.playerName = authData.user.global_name || authData.user.username;
                 localStorage.setItem('farkle-username', this.playerName);
                 this.debugLog(`Authenticated as ${this.playerName}`);
             }
