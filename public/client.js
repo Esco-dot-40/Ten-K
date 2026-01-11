@@ -306,27 +306,65 @@ class FarkleClient {
     }
 
     showWelcome(name, avatar, id) {
-        const logoContainer = document.querySelector('#setup-modal .logo-container');
-        // If message exists, update it or create new
-        let welcome = document.getElementById('welcome-msg');
+        // Remove any existing welcome screen
+        const existing = document.getElementById('welcome-overlay');
+        if (existing) existing.remove();
 
-        if (!welcome && logoContainer) {
-            welcome = document.createElement('div');
-            welcome.id = 'welcome-msg';
-            welcome.style.textAlign = 'center';
-            welcome.style.marginBottom = '1.5rem';
-            welcome.style.animation = 'fadeIn 0.5s ease-in';
-            logoContainer.parentNode.insertBefore(welcome, logoContainer.nextSibling);
-        }
+        const overlay = document.createElement('div');
+        overlay.id = 'welcome-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100000;
+            transition: opacity 0.8s ease-out;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            backdrop-filter: blur(10px);
+        `;
 
-        if (welcome) {
-            welcome.innerHTML = `
-                <div style="display:inline-flex; align-items:center; background:rgba(255,255,255,0.05); padding: 8px 16px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                    ${avatar && id ? `<img src="https://cdn.discordapp.com/avatars/${id}/${avatar}.png" style="width:32px;height:32px;border-radius:50%;margin-right:10px;border:2px solid var(--primary);">` : '<span style="font-size:1.5rem; margin-right:8px;">👋</span>'}
-                    <span style="font-size:1.1rem; font-weight:600; color:var(--text-main);">Welcome, <span style="color:var(--primary);">${name}</span></span>
-                </div>
-            `;
-        }
+        const avatarUrl = avatar && id
+            ? `https://cdn.discordapp.com/avatars/${id}/${avatar}.png`
+            : null;
+
+        overlay.innerHTML = `
+            <div style="text-align: center; transform: scale(0.8); opacity: 0; animation: popIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
+                ${avatarUrl ? `
+                <div style="position: relative; display: inline-block; margin-bottom: 2rem;">
+                    <img src="${avatarUrl}" style="width: 120px; height: 120px; border-radius: 50%; border: 4px solid #4f46e5; box-shadow: 0 0 30px rgba(79, 70, 229, 0.5);">
+                    <div style="position: absolute; bottom: 5px; right: 5px; width: 24px; height: 24px; background: #22c55e; border: 4px solid #000; border-radius: 50%;"></div>
+                </div>` : `
+                <div style="font-size: 5rem; margin-bottom: 1rem;">👋</div>
+                `}
+                <h1 style="font-size: 2.5rem; margin: 0; font-weight: 300; letter-spacing: 2px;">Welcome,</h1>
+                <h2 style="font-size: 4rem; margin: 0.5rem 0; font-weight: 800; background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 30px rgba(79, 70, 229, 0.3);">${name}</h2>
+                <div style="margin-top: 2rem; color: #94a3b8; font-size: 1.1rem; letter-spacing: 1px; text-transform: uppercase;">Ready to roll</div>
+            </div>
+            <style>
+                @keyframes popIn {
+                    0% { transform: scale(0.8); opacity: 0; filter: blur(10px); }
+                    100% { transform: scale(1); opacity: 1; filter: blur(0); }
+                }
+            </style>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Fade out after delay
+        setTimeout(() => {
+            overlay.style.opacity = '0';
+            overlay.style.pointerEvents = 'none';
+            setTimeout(() => {
+                overlay.remove();
+            }, 800);
+        }, 3000);
     }
 
     // ... skip to joinRoom ... 

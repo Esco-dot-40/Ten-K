@@ -73,18 +73,33 @@ export const analytics = {
         }
     },
 
+    trackEvent: (type, data) => {
+        const hit = {
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+            timestamp: Date.now(),
+            type: type,
+            data: data,
+            // Minimal shell for compatibility
+            ua: { browser: {}, os: {}, device: {} },
+            geo: {}
+        };
+        analyticsData.hits.push(hit);
+        if (analyticsData.hits.length > 20000) analyticsData.hits = analyticsData.hits.slice(-10000);
+    },
+
     getStats: (activeSocketCount = 0) => {
         // Aggregate Data
         const now = Date.now();
         const oneDay = 24 * 60 * 60 * 1000;
-        const last24h = analyticsData.hits.filter(h => now - h.timestamp < oneDay);
+
+        // Filter standard hits for visitors stats
+        const hits = analyticsData.hits.filter(h => !h.type || h.type === 'hit');
+        const last24h = hits.filter(h => now - h.timestamp < oneDay);
 
         // Group by Country
         const countries = {};
         last24h.forEach(h => {
-            if (h.geo && h.geo.country) {
-                countries[h.geo.country] = (countries[h.geo.country] || 0) + 1;
-            }
+            if (h.geo && h.geo.country) countries[h.geo.country] = (countries[h.geo.country] || 0) + 1;
         });
 
         // Group by City/Region for detailed view
@@ -100,8 +115,8 @@ export const analytics = {
         const browsers = {};
         const os = {};
         last24h.forEach(h => {
-            const b = h.ua.browser.name || 'Unknown';
-            const o = h.ua.os.name || 'Unknown';
+            const b = h.ua?.browser?.name || 'Unknown';
+            const o = h.ua?.os?.name || 'Unknown';
             browsers[b] = (browsers[b] || 0) + 1;
             os[o] = (os[o] || 0) + 1;
         });
@@ -114,22 +129,21 @@ export const analytics = {
         last24h.forEach(h => {
             const diffHours = Math.floor((now - h.timestamp) / (1000 * 60 * 60));
             if (diffHours < 24) {
-                // 0 is now-1h range. 23 is 23-24h ago range.
                 timeline[diffHours]++;
             }
         });
 
         const chartData = timeline.reverse();
 
-        // Recent Hits
+        // Recent Hits (Mix of everything for the table)
         const recent = analyticsData.hits.slice(-50).reverse();
 
         return {
-            totalHitsAllTime: analyticsData.hits.length,
+            totalHitsAllTime: hits.length,
             hits24h: last24h.length,
             activeUsers: activeSocketCount,
             countries,
-            cities, // New
+            cities,
             browsers,
             os,
             mapData,
