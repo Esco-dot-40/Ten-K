@@ -97,7 +97,7 @@ app.post('/api/token', async (req, res) => {
         // 1. Exchange Code for Access Token
         const params = new URLSearchParams({
             client_id: process.env.DISCORD_CLIENT_ID || '1455067365694771364',
-            client_secret: process.env.DISCORD_CLIENT_SECRET,
+            client_secret: process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET,
             grant_type: 'authorization_code',
             code,
             // IMPORTANT: In embedded apps, redirect_uri usually needs to match 
