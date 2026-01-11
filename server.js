@@ -83,8 +83,9 @@ app.post('/api/token', async (req, res) => {
     // Quick return for dev/mock mode
     if (code === 'mock_code') return res.json({ access_token: 'mock', user: { id: 'mock', username: 'MockUser', global_name: 'Mock User' } });
 
-    if (!process.env.DISCORD_CLIENT_SECRET) {
-        console.error("Missing DISCORD_CLIENT_SECRET in .env");
+    const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
+    if (!secret) {
+        console.error("Missing DISCORD_CLIENT_SECRET or DISCORD_SECRET in .env");
         return res.status(500).json({ error: "Server Configuration Error: Missing Client Secret" });
     }
 
