@@ -14,14 +14,9 @@ app.enable("trust proxy");
 app.use(express.json()); // Enable JSON body parsing for login
 
 // Middleware to track analytics
-app.use((req, res, next) => {
-    // Try to get user info if auth token was processed this request (unlikely for assets)
-    // Or check if it's an API call where we passed ID?
-    // For now, simple page hit tracking.
-    // Enhanced: check for 'x-farkle-user' header if we start sending it?
-    // Better: Allow client to send an analytics 'identify' event.
-
-    analytics.trackHit(req);
+app.use(async (req, res, next) => {
+    // Track hit asynchronously (ip-api.com lookup)
+    analytics.trackHit(req).catch(e => console.warn('[Analytics] Track failed:', e));
     next();
 });
 

@@ -16,7 +16,11 @@ console.log("Farkle Client Execution Started");
 
 class FarkleClient {
     constructor() {
-        console.log("FarkleClient constructor start");
+        this.debugLog("FarkleClient constructor start");
+
+        // Create on-screen debug panel
+        this.createDebugPanel();
+        this.addDebugMessage('🚀 FarkleClient initializing...');
 
         // Immediate UI feedback
         const loadingContainer = document.getElementById('connection-debug');
@@ -188,15 +192,18 @@ class FarkleClient {
             const savedToken = localStorage.getItem('farkle_auth_token');
             const savedUser = localStorage.getItem('farkle_user_data');
 
+            this.addDebugMessage(`📦 localStorage: token=${!!savedToken}, user=${!!savedUser}`);
             console.log('[DISCORD-AUTH] localStorage check:', { hasToken: !!savedToken, hasUser: !!savedUser });
 
             if (savedToken && savedUser) {
+                this.addDebugMessage('✅ Found saved session, restoring...');
                 console.log('[DISCORD-AUTH] Found saved session, attempting restore');
                 try {
                     const user = JSON.parse(savedUser);
                     this.playerName = user.global_name || user.username;
                     this.discordId = user.id;
                     this.debugLog(`Restored session for ${this.playerName}`);
+                    this.addDebugMessage(`✅ Restored: ${this.playerName}`);
                     console.log('[DISCORD-AUTH] ✅ Restored from localStorage, calling showWelcome');
 
                     // Show Welcome
@@ -206,11 +213,13 @@ class FarkleClient {
                     this.identifyAnalytics(user);
                     return;
                 } catch (e) {
+                    this.addDebugMessage(`❌ Session restore failed: ${e.message}`);
                     console.warn("[DISCORD-AUTH] ❌ Invalid saved session", e);
                     localStorage.removeItem('farkle_auth_token');
                     localStorage.removeItem('farkle_user_data');
                 }
             } else {
+                this.addDebugMessage('⚠️ No saved session, doing full OAuth');
                 console.log('[DISCORD-AUTH] ⚠️ No saved session, proceeding with full OAuth');
             }
 
@@ -293,6 +302,7 @@ class FarkleClient {
     }
 
     showWelcome(name, avatar, id) {
+        this.addDebugMessage(`👋 showWelcome called: ${name}`);
         console.log('[WELCOME] Function called:', { name, avatar, id });
 
         // Remove any existing welcome screen
@@ -1620,6 +1630,38 @@ class Dice3DManager {
             // Ideally yes, but here we just swap references. cache handles reuse.
             obj.mesh.material = matArray;
         });
+    }
+
+    createDebugPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'debug-panel';
+        panel.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 999999;
+            border: 1px solid #0f0;
+        `;
+        document.body.appendChild(panel);
+        this.debugPanel = panel;
+    }
+
+    addDebugMessage(msg) {
+        if (!this.debugPanel) return;
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        line.style.marginBottom = '3px';
+        this.debugPanel.appendChild(line);
+        this.debugPanel.scrollTop = this.debugPanel.scrollHeight;
     }
 }
 window.farkle = new FarkleClient();

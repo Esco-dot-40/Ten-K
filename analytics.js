@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const geoip = require('geoip-lite');
 const UAParser = require('ua-parser-js');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,7 +12,6 @@ const DATA_FILE = path.join(__dirname, 'analytics_data.json');
 // In-memory storage
 let analyticsData = {
     hits: [],
-    // We can aggregate stats on load or on the fly
 };
 
 // Load data on startup
@@ -36,20 +34,43 @@ setInterval(() => {
 }, 60000); // Every minute
 
 export const analytics = {
-    trackHit: (req) => {
+    trackHit: async (req) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/libs') || req.path.includes('.')) {
-            // Filter out assets like .css, .js unless it's the main page.
             if (req.path !== '/' && req.path !== '/index.html') return;
         }
 
         const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
         const uaString = req.headers['user-agent'];
         const uaParser = new UAParser(uaString);
-        const geo = geoip.lookup(ip);
 
-        // Log for debugging
-        if (process.env.NODE_ENV !== 'production') {
-            console.log('[ANALYTICS] IP:', ip, 'Geo:', geo);
+        // Use ip-api.com for accurate geolocation (free, no key, 45 req/min)
+        let geo = null;
+        try {
+            const fetch = (await import('node-fetch')).default;
+            const geoResponse = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,query`);
+            const geoData = await geoResponse.json();
+
+            if (geoData.status === 'success') {
+                geo = {
+                    country: geoData.country,
+                    countryCode: geoData.countryCode,
+                    region: geoData.region,
+                    regionName: geoData.regionName,
+                    city: geoData.city,
+                    zip: geoData.zip,
+                    lat: geoData.lat,
+                    lon: geoData.lon,
+                    ll: [geoData.lat, geoData.lon],
+                    timezone: geoData.timezone,
+                    isp: geoData.isp,
+                    org: geoData.org,
+                    as: geoData.as,
+                    proxy: geoData.proxy || false
+                };
+                console.log(`[ANALYTICS] ✅ Accurate location for ${ip}: ${geo.city}, ${geo.regionName}, ${geo.country}`);
+            }
+        } catch (e) {
+            console.warn('[ANALYTICS] ip-api.com lookup failed:', e.message);
         }
 
         // Device type detection
@@ -70,11 +91,11 @@ export const analytics = {
             }
         }
 
-        // Session tracking (using cookies if available)
+        // Session tracking
         const sessionId = req.headers['cookie']?.match(/farkle_session=([^;]+)/)?.[1] ||
             `session_${Date.now()}_${Math.random().toString(36)}`;
 
-        // Check if returning visitor (basic heuristic: same IP in last 30 days)
+        // Check if returning visitor
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         const isReturning = analyticsData.hits.some(h =>
             h.ip === ip && h.timestamp > thirtyDaysAgo
@@ -90,13 +111,7 @@ export const analytics = {
             deviceType: deviceType,
             trafficSource: trafficSource,
             referrer: referrer,
-            geo: geo ? {
-                country: geo.country,
-                region: geo.region,
-                city: geo.city,
-                timezone: geo.timezone,
-                ll: geo.ll // [lat, long]
-            } : null,
+            geo: geo,
             ua: {
                 browser: uaParser.getBrowser(),
                 os: uaParser.getOS(),
@@ -107,7 +122,7 @@ export const analytics = {
 
         analyticsData.hits.push(hit);
 
-        // Trim history if needed
+        // Trim history
         if (analyticsData.hits.length > 20000) {
             analyticsData.hits = analyticsData.hits.slice(-10000);
         }
@@ -119,7 +134,6 @@ export const analytics = {
             timestamp: Date.now(),
             type: type,
             data: data,
-            // Minimal shell for compatibility
             ua: { browser: {}, os: {}, device: {} },
             geo: {}
         };
@@ -128,30 +142,50 @@ export const analytics = {
     },
 
     getStats: (activeSocketCount = 0) => {
-        // Aggregate Data
         const now = Date.now();
         const oneDay = 24 * 60 * 60 * 1000;
 
-        // Filter standard hits for visitors stats
+        // Filter hits
         const hits = analyticsData.hits.filter(h => !h.type || h.type === 'hit');
         const last24h = hits.filter(h => now - h.timestamp < oneDay);
 
-        // Group by Country
+        // Unique visitors
+        const uniqueIPs = new Set(last24h.map(h => h.ip)).size;
+
+        // New vs Returning
+        const newVisitors = last24h.filter(h => !h.isReturning).length;
+        const returningVisitors = last24h.filter(h => h.isReturning).length;
+
+        // Device Types
+        const deviceTypes = {};
+        last24h.forEach(h => {
+            const type = h.deviceType || 'Desktop';
+            deviceTypes[type] = (deviceTypes[type] || 0) + 1;
+        });
+
+        // Traffic Sources
+        const trafficSources = {};
+        last24h.forEach(h => {
+            const source = h.trafficSource || 'Direct';
+            trafficSources[source] = (trafficSources[source] || 0) + 1;
+        });
+
+        // Countries
         const countries = {};
         last24h.forEach(h => {
             if (h.geo && h.geo.country) countries[h.geo.country] = (countries[h.geo.country] || 0) + 1;
         });
 
-        // Group by City/Region for detailed view
+        // Cities
         const cities = {};
         last24h.forEach(h => {
             if (h.geo && h.geo.city) {
-                const key = `${h.geo.city}, ${h.geo.region || ''}, ${h.geo.country}`;
+                const key = `${h.geo.city}, ${h.geo.regionName || h.geo.region || ''}, ${h.geo.country}`;
                 cities[key] = (cities[key] || 0) + 1;
             }
         });
 
-        // Group by OS/Browser
+        // Browsers/OS
         const browsers = {};
         const os = {};
         last24h.forEach(h => {
@@ -161,10 +195,10 @@ export const analytics = {
             os[o] = (os[o] || 0) + 1;
         });
 
-        // Heatmap Data
+        // Heatmap
         const mapData = last24h.map(h => h.geo ? h.geo.ll : null).filter(ll => ll);
 
-        // Visits timeline
+        // Timeline
         const timeline = new Array(24).fill(0);
         last24h.forEach(h => {
             const diffHours = Math.floor((now - h.timestamp) / (1000 * 60 * 60));
@@ -174,14 +208,17 @@ export const analytics = {
         });
 
         const chartData = timeline.reverse();
-
-        // Recent Hits (Mix of everything for the table)
         const recent = analyticsData.hits.slice(-50).reverse();
 
         return {
             totalHitsAllTime: hits.length,
             hits24h: last24h.length,
             activeUsers: activeSocketCount,
+            uniqueVisitors: uniqueIPs,
+            newVisitors,
+            returningVisitors,
+            deviceTypes,
+            trafficSources,
             countries,
             cities,
             browsers,
