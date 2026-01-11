@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import geoip from 'geoip-lite';
-import UAParser from 'ua-parser-js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const geoip = require('geoip-lite');
+const UAParser = require('ua-parser-js');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
