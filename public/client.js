@@ -131,7 +131,6 @@ class FarkleClient {
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
-            try { this.initSimpleBackground(); } catch (e) { console.error("Background Init Failed", e); }
             try { this.initHistory(); } catch (e) { console.error("History Init Failed", e); }
             this.debugLog("Modules initialized");
             // Fall through to Discord Init immediately
@@ -161,6 +160,13 @@ class FarkleClient {
             // Check if running in iframe (Discord env) - simplistic check
             if (window.self === window.top && !window.location.search.includes('frame_id')) {
                 this.debugLog("Not in Discord (Standalone). Using Random Name.");
+                console.log('[WELCOME-TRIGGER] In standalone mode, playerName:', this.playerName);
+                // Show welcome screen anyway for testing
+                console.log('[WELCOME-TRIGGER] Setting timeout to show welcome');
+                setTimeout(() => {
+                    console.log('[WELCOME-TRIGGER] Timeout fired, calling showWelcome');
+                    this.showWelcome(this.playerName, null, null);
+                }, 500);
                 return;
             }
 
@@ -258,6 +264,7 @@ class FarkleClient {
             this.discordId = user.id;
 
             this.debugLog(`Authenticated as ${this.playerName}`);
+            console.log('[WELCOME] Calling showWelcome with:', this.playerName, user.avatar, user.id);
             this.showWelcome(this.playerName, user.avatar, user.id);
             this.identifyAnalytics(user);
 
@@ -284,10 +291,16 @@ class FarkleClient {
     }
 
     showWelcome(name, avatar, id) {
+        console.log('[WELCOME] Function called:', { name, avatar, id });
+
         // Remove any existing welcome screen
         const existing = document.getElementById('welcome-overlay');
-        if (existing) existing.remove();
+        if (existing) {
+            console.log('[WELCOME] Removing existing overlay');
+            existing.remove();
+        }
 
+        console.log('[WELCOME] Creating new overlay');
         const overlay = document.createElement('div');
         overlay.id = 'welcome-overlay';
         overlay.style.cssText = `
@@ -333,13 +346,17 @@ class FarkleClient {
             </style>
         `;
 
+        console.log('[WELCOME] Appending overlay to body');
         document.body.appendChild(overlay);
+        console.log('[WELCOME] Overlay appended, setting timeout for fade out');
 
         // Fade out after delay
         setTimeout(() => {
+            console.log('[WELCOME] Fading out');
             overlay.style.opacity = '0';
             overlay.style.pointerEvents = 'none';
             setTimeout(() => {
+                console.log('[WELCOME] Removing overlay');
                 overlay.remove();
             }, 800);
         }, 3000);
