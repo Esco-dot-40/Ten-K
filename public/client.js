@@ -380,24 +380,56 @@ class FarkleClient {
         content.innerHTML = '<p>Loading...</p>';
         modal.classList.remove('hidden');
 
-        // We need our own DB ID.
-        // Currently we don't persist it in client explicitly, but assume auth via initDiscord
-        // If not authed, we can't show much.
-        // Assuming we rely on a stored 'farkle-db-id' if we start sending it, or we re-auth/check /api/users/@me?
-        // Actually, initDiscord sets 'farkle-username'.
-        // Let's rely on initDiscord flow to eventually save ID or similar?
-        // Or just say "Login to Discord first"
-
-        if (!this.discordSdk) {
-            content.innerHTML = "<p>Please play via Discord Activity or Link Account to view stats.</p>";
-            return;
+        if (!this.discordId) {
+            // Fallback: try to see if we are in "mock" mode or just not authed
+            if (this.discordSdk && this.discordSdk.mock) {
+                // Mock ID
+                this.discordId = "mock_user_123";
+            } else {
+                content.innerHTML = "<p>Please play via Discord Activity to view stats.</p>";
+                return;
+            }
         }
 
-        // TODO: Pass user ID or fetch "me" from backend using the token if we stored it?
-        // Since we don't hold the token long-term in client (except maybe in memory),
-        // we might not actully know our ID here unless we saved it.
-        // Let's fetch it via a new 'api/me' endpoint or assume we saved it.
-        content.innerHTML = "<p>Stats feature pending User ID persistence update.</p>";
+        try {
+            const res = await fetch(`/api/stats/${this.discordId}`);
+            if (!res.ok) throw new Error("Stats not found");
+            const data = await res.json();
+            const stats = data.stats || {};
+
+            content.innerHTML = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    ${data.avatar ? `<img src="https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png" style="width:64px;height:64px;border-radius:50%; margin-bottom:10px;">` : ''}
+                    <h3>${data.display_name}</h3>
+                    <p style="opacity:0.7">@${data.username}</p>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8em; opacity: 0.7;">Games Played</div>
+                        <div style="font-size: 1.2em; font-weight: bold;">${stats.games_played || 0}</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8em; opacity: 0.7;">Wins</div>
+                        <div style="font-size: 1.2em; font-weight: bold; color: gold;">${stats.wins || 0}</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8em; opacity: 0.7;">Total Score</div>
+                        <div style="font-size: 1.2em; font-weight: bold;">${Number(stats.total_score || 0).toLocaleString()}</div>
+                    </div>
+                     <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8em; opacity: 0.7;">Farkles</div>
+                        <div style="font-size: 1.2em; font-weight: bold; color: #ff6b6b;">${stats.farkles_count || 0}</div>
+                    </div>
+                    <div style="grid-column: 1 / -1; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8em; opacity: 0.7;">Highest Round Score</div>
+                        <div style="font-size: 1.2em; font-weight: bold;">${Number(stats.highest_round_score || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            console.error(e);
+            content.innerHTML = "<p>No stats found yet. Play a game to track stats!</p>";
+        }
     }
 
     getStatsModal() {
