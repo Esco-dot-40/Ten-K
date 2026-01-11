@@ -182,11 +182,12 @@ class FarkleClient {
             this.debugLog("Loading Discord SDK...");
             let DiscordSDK;
             try {
-                // Dynamic Import
-                const module = await import("/libs/@discord/embedded-app-sdk/output/index.mjs");
+                // Dynamic Import (CDN is more reliable if local libs missing)
+                const module = await import("https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.0.0/output/index.mjs");
                 DiscordSDK = module.DiscordSDK;
             } catch (importErr) {
                 this.debugLog(`SDK Import Failed: ${importErr.message}`);
+                this.addDebugMessage(`❌ SDK Import Failed: ${importErr.message}`);
                 return; // Fallback to Player N
             }
 
@@ -229,10 +230,7 @@ class FarkleClient {
             }
 
             // 2. Proceed with Discord SDK Auth if no session
-            if (!this.discordSdk) {
-                const { DiscordSDK } = await import("https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.0.0/output/index.mjs");
-                this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
-            }
+            this.addDebugMessage('Readying Discord SDK...');
 
             await this.discordSdk.ready();
 
