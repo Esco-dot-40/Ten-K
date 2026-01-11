@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farkle Analytics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Admin Access</h2>
+            <input type="password" id="admin-pass" placeholder="Password">
+            <button id="login-btn">Login</button>
+            <p id="login-error" style="color: red; display: none;">Invalid Password</p>
+        </div>
+    </div>
+
+    <div id="dashboard" class="hidden">
+        <header>
+            <h1>Farkle Analytics</h1>
+            <button id="refresh-btn">Refresh</button>
+        </header>
+
+        <div class="stats-grid">
+            <div class="card stat-card">
+                <h3>Active Users</h3>
+                <div class="value" id="stat-active">0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>Hits (24h)</h3>
+                <div class="value" id="stat-24h">0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>Total Hits</h3>
+                <div class="value" id="stat-total">0</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3>Traffic (Last 24h)</h3>
+                <canvas id="traffic-chart"></canvas>
+            </div>
+            <div class="card">
+                <h3>User Map</h3>
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <div class="card">
+                <h3>Browsers</h3>
+                <canvas id="browser-chart"></canvas>
+            </div>
+            <div class="card">
+                <h3>OS</h3>
+                <canvas id="os-chart"></canvas>
+            </div>
+            <div class="card">
+                <h3>Countries</h3>
+                <div id="country-list" class="list-container"></div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h3>Recent Hits</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>IP</th>
+                            <th>Path</th>
+                            <th>Loc</th>
+                            <th>OS/Browser</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-table"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

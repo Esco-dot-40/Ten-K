@@ -4,12 +4,21 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { calculateScore, hasPossibleMoves, isScoringSelection, DEFAULT_RULES } from './public/rules.js';
+import { analytics } from './analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 app.enable("trust proxy");
+app.use(express.json()); // Enable JSON body parsing for login
+
+// Analytics Middleware
+app.use((req, res, next) => {
+    analytics.trackHit(req);
+    next();
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
@@ -20,8 +29,33 @@ const io = new Server(httpServer, {
     }
 });
 
+app.get('/admin', (req, res) => res.redirect('/admin/'));
+
 app.use(express.static(join(__dirname, 'public')));
 app.use('/libs', express.static(join(__dirname, 'node_modules')));
+
+// --- Admin API ---
+const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123'; // Default password
+
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASS) {
+        // Simple token: just the password (for now) or a fixed string
+        // If "like others", maybe session? But token is easier for SPA
+        res.json({ success: true, token: 'valid-token-' + ADMIN_PASS });
+    } else {
+        res.status(401).json({ success: false });
+    }
+});
+
+app.get('/api/admin/stats', (req, res) => {
+    const auth = req.headers['authorization'];
+    if (auth === 'valid-token-' + ADMIN_PASS) {
+        res.json(analytics.getStats(io.engine.clientsCount));
+    } else {
+        res.status(401).json({ error: "Unauthorized" });
+    }
+});
 
 class GameState {
     constructor(roomCode, rules = DEFAULT_RULES) {
@@ -304,6 +338,7 @@ class GameState {
     nextTurn() {
         let attempts = 0;
         let p;
+        const resultLoopLimit = this.players.length + 10;
 
         do {
             this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
@@ -311,32 +346,22 @@ class GameState {
 
             if (!p.connected) {
                 p.missedTurns = (p.missedTurns || 0) + 1;
-                console.log(`[Game ${this.roomCode}] Player ${p.name} missed turn ${p.missedTurns}/3`);
+                console.log(`[Game ${this.roomCode}] Player ${p.name} missed turn ${p.missedTurns}`);
+                // Disabling auto-kick slice to prevent index shifts/random movement issues
+                /* 
                 if (p.missedTurns >= 3) {
-                    console.log(`[Game ${this.roomCode}] Kicking ${p.name} for inactivity.`);
-                    // Remove from array. 
-                    // Adjust index if needed since we are modifying array while iterating? 
-                    // We are just rotating index, so splicing at index implies current index is now next player.
-                    // But we are in a loop looking for connected player.
-                    this.players.splice(this.currentPlayerIndex, 1);
-                    // Decrement index so next loop increment hits the correct next player
-                    this.currentPlayerIndex--;
-
-                    // Check if empty
-                    if (this.players.length === 0) {
-                        this.gameStatus = 'waiting';
-                        this.resetRound();
-                        return;
-                    }
-                }
+                    console.log(`[Game ${this.roomCode}] Marking ${p.name} as inactive/skipped.`);
+                    // Don't splice. Just ignore.
+                } 
+                */
             } else {
-                // If connected, reset missed turns? usually yes.
                 p.missedTurns = 0;
             }
 
             attempts++;
-        } while ((!p || !p.connected) && attempts < this.players.length + 5);
-        // +5 safety buffer for splicing logic
+        } while ((!p || !p.connected) && attempts < resultLoopLimit);
+        // Safety break
+
 
         if (this.players.length < 2 && this.gameStatus === 'playing') {
             // Not enough players to continue? Or just wait?
@@ -467,6 +492,9 @@ io.on('connection', (socket) => {
             existingPlayer = game.players.find(p => p.id === socket.id);
             if (existingPlayer) {
                 existingPlayer.connected = true;
+                if (data?.name && data.name !== existingPlayer.name) {
+                    existingPlayer.name = data.name; // Update name (e.g. late Discord auth)
+                }
                 socket.join(roomCode);
                 socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
                 io.to(roomCode).emit('game_state_update', game.getState());

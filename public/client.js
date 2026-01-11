@@ -3,138 +3,10 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import * as CANNON from "cannon-es";
 
 // Removed GSAP imports as they were unused and causing loading issues
-// Inlined Rules to prevent module loading race conditions or path errors
+import { calculateScore, isScoringSelection } from './rules.js';
 
-// --- INLINED RULES START ---
-const DEFAULT_RULES = {
-    single1: 100,
-    single5: 50,
-    triple1: 1000,
-    triple2: 200,
-    triple3: 300,
-    triple4: 400,
-    triple5: 500,
-    triple6: 600,
-    straight: 1500,
-    threePairs: 1500,
-    fourOfAKind: 1000,
-    fiveOfAKind: 2000,
-    sixOfAKind: 3000,
-    sixOnes: 5000,
-    twoTriplets: 2500,
-    fullHouseBonus: 250,
-    fourStraight: 500,
-    fiveStraight: 1200,
-    enableThreePairs: true,
-    enableTwoTriplets: true,
-    enableFullHouse: false,
-    enableSixOnesInstantWin: false,
-    openingScore: 0,
-    winScore: 10000,
-    threeFarklesPenalty: 1000,
-    toxicTwos: false,
-    welfareMode: false,
-    highStakes: false,
-    noFarkleFirstRoll: true
-};
+// Removed inlined rules in favor of shared module
 
-function calculateScore(dice, rules = DEFAULT_RULES) {
-    if (!dice || dice.length === 0) return 0;
-    rules = { ...DEFAULT_RULES, ...rules };
-    const counts = {};
-    for (const die of dice) counts[die] = (counts[die] || 0) + 1;
-    const distinct = Object.keys(counts).length;
-    const totalDice = dice.length;
-
-    if (totalDice === 6 && distinct === 6) return rules.straight;
-    if (counts[1] === 6) return rules.sixOnes;
-    for (let i = 2; i <= 6; i++) {
-        if (counts[i] === 6) return rules.sixOfAKind;
-    }
-    if (rules.enable5Straight && totalDice === 5 && distinct === 5) {
-        if ((counts[1] && counts[2] && counts[3] && counts[4] && counts[5]) ||
-            (counts[2] && counts[3] && counts[4] && counts[5] && counts[6])) {
-            return rules.fiveStraight;
-        }
-    }
-    if (rules.enable4Straight && totalDice === 4 && distinct === 4) {
-        const has1234 = (counts[1] && counts[2] && counts[3] && counts[4]);
-        const has2345 = (counts[2] && counts[3] && counts[4] && counts[5]);
-        const has3456 = (counts[3] && counts[4] && counts[5] && counts[6]);
-        if (has1234 || has2345 || has3456) return rules.fourStraight;
-    }
-    if (rules.enableThreePairs && totalDice === 6 && distinct === 3) {
-        if (Object.values(counts).every(c => c === 2)) return rules.threePairs;
-    }
-    if (rules.enableTwoTriplets && totalDice === 6 && distinct === 2) {
-        const vals = Object.values(counts);
-        if (vals[0] === 3 && vals[1] === 3) return rules.twoTriplets;
-    }
-
-    let score = 0;
-    for (let face = 1; face <= 6; face++) {
-        const count = counts[face] || 0;
-        if (count === 0) continue;
-        let tripleValue = 0;
-        switch (face) {
-            case 1: tripleValue = rules.triple1; break;
-            case 2: tripleValue = rules.triple2; break;
-            case 3: tripleValue = rules.triple3; break;
-            case 4: tripleValue = rules.triple4; break;
-            case 5: tripleValue = rules.triple5; break;
-            case 6: tripleValue = rules.triple6; break;
-        }
-
-        if (count >= 3) {
-            let nKindScore = 0;
-            if (count === 3) nKindScore = tripleValue;
-            else if (count === 4) nKindScore = rules.fourOfAKind || (tripleValue * 2);
-            else if (count === 5) nKindScore = rules.fiveOfAKind || (tripleValue * 4);
-            else if (count === 6) nKindScore = rules.sixOfAKind || (tripleValue * 8);
-
-            if (face === 1 || face === 5) {
-                const singleVal = (face === 1 ? rules.single1 : rules.single5);
-                const combinedScore = tripleValue + (count - 3) * singleVal;
-                score += Math.max(nKindScore, combinedScore);
-            } else {
-                score += nKindScore;
-            }
-        } else {
-            if (face === 1) score += count * rules.single1;
-            else if (face === 5) score += count * rules.single5;
-        }
-    }
-    return score;
-}
-
-function isScoringSelection(dice, rules = DEFAULT_RULES) {
-    const score = calculateScore(dice, rules);
-    if (score === 0) return false;
-    const counts = {};
-    for (const d of dice) counts[d] = (counts[d] || 0) + 1;
-    const distinct = Object.keys(counts).length;
-    const totalDice = dice.length;
-    if (totalDice === 6 && distinct === 6) return true;
-    if (rules.enableThreePairs && totalDice === 6 && Object.values(counts).every(c => c === 2)) return true;
-    if (rules.enable5Straight && totalDice === 5 && distinct === 5) {
-        if ((counts[1] && counts[2] && counts[3] && counts[4] && counts[5]) || (counts[2] && counts[3] && counts[4] && counts[5] && counts[6])) return true;
-    }
-    if (rules.enable4Straight && totalDice === 4 && distinct === 4) {
-        const has1234 = (counts[1] && counts[2] && counts[3] && counts[4]);
-        const has2345 = (counts[2] && counts[3] && counts[4] && counts[5]);
-        const has3456 = (counts[3] && counts[4] && counts[5] && counts[6]);
-        if (has1234 || has2345 || has3456) return true;
-    }
-    for (let face = 1; face <= 6; face++) {
-        const c = counts[face] || 0;
-        if (c > 0) {
-            if (face === 1 || face === 5) continue;
-            if (c < 3) return false;
-        }
-    }
-    return true;
-}
-// --- INLINED RULES END ---
 
 // Discord SDK integration refactored to use dynamic import
 
@@ -400,23 +272,6 @@ class FarkleClient {
                     this.dice3D.updateDiceMaterials();
                 }
             });
-        }
-    }
-
-    initSimpleBackground() {
-        const container = document.getElementById('bg-dice-container');
-        if (!container) return;
-
-        // Simple ambient decoration: create a few floating dice icons
-        for (let i = 0; i < 15; i++) {
-            const dot = document.createElement('div');
-            dot.style.position = 'absolute';
-            dot.style.width = '2px';
-            dot.style.height = '2px';
-            dot.style.background = 'rgba(255,255,255,0.1)';
-            dot.style.left = Math.random() * 100 + '%';
-            dot.style.top = Math.random() * 100 + '%';
-            container.appendChild(dot);
         }
     }
 
