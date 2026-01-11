@@ -564,9 +564,10 @@ class FarkleClient {
         });
 
         if (this.ui.leaveBtn) {
-            this.ui.leaveBtn.addEventListener('click', () => {
+            this.ui.leaveBtn.onclick = (e) => {
+                e.preventDefault();
                 this.leaveGame();
-            });
+            };
         }
 
         // Chat Listeners
@@ -854,9 +855,9 @@ class FarkleClient {
     }
 
     leaveGame(fromPopState = false) {
-        if (!fromPopState) {
-            if (!confirm("Are you sure you want to leave the table?")) return;
-        }
+        // if (!fromPopState) {
+        //    if (!confirm("Are you sure you want to leave the table?")) return;
+        // }
 
         this.debugLog("Leaving Game...");
 
@@ -890,15 +891,12 @@ class FarkleClient {
         // Reset Discord Presence
         this.updateDiscordPresence("In Lobby", "Selecting Table");
 
-        // Refresh Room List (will happen on mode select, but good to ensure socket is ready)
-        // this.socket.emit('get_room_list'); // Done when clicking mode
-
         if (this.ui.gameInfoBar) this.ui.gameInfoBar.style.display = 'none';
         if (this.ui.leaveText) this.ui.leaveText.style.display = 'none';
-        if (this.ui.leaveBtn) {
-            this.ui.leaveBtn.style.width = '44px';
-            this.ui.leaveBtn.style.padding = '0';
-        }
+
+        // Hide leave button or reset style
+        // Actually, logic elsewhere likely controls visibility, but let's ensure it handles correctly
+        // (UI update loop will hide it if game is null)
     }
 
     canInteract() {
