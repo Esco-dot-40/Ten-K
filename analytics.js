@@ -87,6 +87,15 @@ export const analytics = {
             }
         });
 
+        // Group by City/Region for detailed view
+        const cities = {};
+        last24h.forEach(h => {
+            if (h.geo && h.geo.city) {
+                const key = `${h.geo.city}, ${h.geo.region || ''}, ${h.geo.country}`;
+                cities[key] = (cities[key] || 0) + 1;
+            }
+        });
+
         // Group by OS/Browser
         const browsers = {};
         const os = {};
@@ -97,36 +106,30 @@ export const analytics = {
             os[o] = (os[o] || 0) + 1;
         });
 
-        // Heatmap Data (All time or last 24h?) - Last 24h usually more relevant for "Heatmap" dashboard
+        // Heatmap Data
         const mapData = last24h.map(h => h.geo ? h.geo.ll : null).filter(ll => ll);
 
-        // Visits timeline (last 24h buckets of 1h)
+        // Visits timeline
         const timeline = new Array(24).fill(0);
         last24h.forEach(h => {
             const diffHours = Math.floor((now - h.timestamp) / (1000 * 60 * 60));
             if (diffHours < 24) {
-                timeline[23 - diffHours]++; // 0 is now, 23 is 23h ago. Wait.
-                // If I want graph left to right (old to new):
-                // 23h ago is index 0.
+                // 0 is now-1h range. 23 is 23-24h ago range.
+                timeline[diffHours]++;
             }
         });
 
-        // Reverse so index 0 is 23h ago, index 23 is now
-        // Currently: index 0 is "hours ago". 
-        // Let's re-map properly for the chart
-        const chartData = [];
-        for (let i = 23; i >= 0; i--) {
-            chartData.push(timeline[i]);
-        }
+        const chartData = timeline.reverse();
 
         // Recent Hits
-        const recent = analyticsData.hits.slice(-20).reverse();
+        const recent = analyticsData.hits.slice(-50).reverse();
 
         return {
             totalHitsAllTime: analyticsData.hits.length,
             hits24h: last24h.length,
             activeUsers: activeSocketCount,
             countries,
+            cities, // New
             browsers,
             os,
             mapData,
