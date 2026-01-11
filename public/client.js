@@ -239,10 +239,22 @@ class FarkleClient {
             }
 
             // 2. Proceed with Discord SDK Auth if no session
-            this.addDebugMessage('Readying Discord SDK...');
+            this.addDebugMessage('🚀 Readying Discord SDK...');
 
-            await this.discordSdk.ready();
+            // Add a timeout to SDK ready
+            const readyTimeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('SDK ready timeout (5s)')), 5000)
+            );
 
+            try {
+                await Promise.race([this.discordSdk.ready(), readyTimeout]);
+                this.addDebugMessage('✅ SDK Ready!');
+            } catch (readyErr) {
+                this.addDebugMessage(`❌ SDK Ready failed: ${readyErr.message}`);
+                throw readyErr;
+            }
+
+            this.addDebugMessage('🔑 Authorizing...');
             // Authorize with Discord Client
             // Let Discord SDK handle prompting intelligently
             const { code } = await this.discordSdk.commands.authorize({
@@ -256,7 +268,9 @@ class FarkleClient {
                     "guilds.members.read"
                 ],
             });
+            this.addDebugMessage('✅ Authorization code received');
 
+            this.addDebugMessage('📡 Exchanging code for token...');
             // Exchange code for token via backend
             const response = await fetch("/api/token", {
                 method: "POST",
@@ -268,8 +282,15 @@ class FarkleClient {
                 }),
             });
 
-            const { access_token, user } = await response.json();
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || `HTTP ${response.status}`);
+            }
 
+            const { access_token, user } = await response.json();
+            this.addDebugMessage(`✅ Token received for ${user.username}`);
+
+            this.addDebugMessage('🔗 Authenticating SDK...');
             // Authenticate with Discord SDK (for channel interactions if needed later)
             const auth = await this.discordSdk.commands.authenticate({
                 access_token,
@@ -278,21 +299,30 @@ class FarkleClient {
             if (auth == null) {
                 throw new Error("Authenticate command failed via SDK");
             }
+            this.addDebugMessage('✅ SDK Authenticated');
 
             // Success! Store session.
-            localStorage.setItem('farkle_auth_token', access_token);
-            localStorage.setItem('farkle_user_data', JSON.stringify(user));
+            try {
+                localStorage.setItem('farkle_auth_token', access_token);
+                localStorage.setItem('farkle_user_data', JSON.stringify(user));
+                this.addDebugMessage('💾 Session saved to localStorage');
+            } catch (lsErr) {
+                this.addDebugMessage(`⚠️ localStorage save failed: ${lsErr.message}`);
+            }
 
             this.playerName = user.global_name || user.username;
             this.discordId = user.id;
 
             this.debugLog(`Authenticated as ${this.playerName}`);
+            this.addDebugMessage(`🎉 Welcome, ${this.playerName}!`);
+
             console.log('[WELCOME] Calling showWelcome with:', this.playerName, user.avatar, user.id);
             this.showWelcome(this.playerName, user.avatar, user.id);
             this.identifyAnalytics(user);
 
         } catch (err) {
             console.error("Discord Auth Failed/Cancelled", err);
+            this.addDebugMessage(`❌ Auth Error: ${err.message}`);
             this.debugLog(`Discord Auth Failed: ${err.message} - Using Default Name`);
             // Fallback to random guest if auth fails
             if (!this.playerName) {
