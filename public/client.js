@@ -1453,20 +1453,26 @@ class FarkleClient {
         panel.id = 'debug-panel';
         panel.style.cssText = `
             position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.9);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 11px;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 300px;
-            max-height: 400px;
-            overflow-y: auto;
-            z-index: 999999;
-            border: 1px solid #0f0;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: #00f2ff;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 240px;
+            max-height: 120px;
+            overflow: hidden;
+            z-index: 10000;
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
             pointer-events: none;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
         `;
         document.body.appendChild(panel);
         this.debugPanel = panel;
@@ -1475,11 +1481,23 @@ class FarkleClient {
     addDebugMessage(msg) {
         if (!this.debugPanel) return;
         const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        line.style.marginBottom = '3px';
+        line.style.cssText = `
+            margin-bottom: 2px;
+            opacity: 0.9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            animation: fadeIn 0.3s ease-out;
+        `;
+        line.textContent = `> ${msg}`;
+
+        // Keep only last 4 messages for minimalism
+        while (this.debugPanel.children.length >= 4) {
+            this.debugPanel.removeChild(this.debugPanel.firstChild);
+        }
+
         this.debugPanel.appendChild(line);
-        this.debugPanel.scrollTop = this.debugPanel.scrollHeight;
-        console.log(`[DEBUG] ${msg}`);
+        console.log(`[SYSTEM] ${msg}`);
     }
 }
 
