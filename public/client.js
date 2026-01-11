@@ -18,6 +18,10 @@ class FarkleClient {
     constructor() {
         console.log("FarkleClient constructor start");
 
+        // Create on-screen debug panel
+        this.createDebugPanel();
+        this.addDebugMessage('🚀 FarkleClient initializing...');
+
         // Default to random player name until Discord loads
         const loadingContainer = document.getElementById('connection-debug');
         if (loadingContainer) {
@@ -1401,6 +1405,44 @@ class FarkleClient {
         this.ui.chatMessages.appendChild(msgDiv);
         this.ui.chatMessages.scrollTop = this.ui.chatMessages.scrollHeight;
     }
+
+    createDebugPanel() {
+        // Remove existing if any
+        const existing = document.getElementById('debug-panel');
+        if (existing) existing.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'debug-panel';
+        panel.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 999999;
+            border: 1px solid #0f0;
+            pointer-events: none;
+        `;
+        document.body.appendChild(panel);
+        this.debugPanel = panel;
+    }
+
+    addDebugMessage(msg) {
+        if (!this.debugPanel) return;
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        line.style.marginBottom = '3px';
+        this.debugPanel.appendChild(line);
+        this.debugPanel.scrollTop = this.debugPanel.scrollHeight;
+        console.log(`[DEBUG] ${msg}`);
+    }
 }
 
 class Dice3DManager {
@@ -1631,38 +1673,6 @@ class Dice3DManager {
             // Ideally yes, but here we just swap references. cache handles reuse.
             obj.mesh.material = matArray;
         });
-    }
-
-    createDebugPanel() {
-        const panel = document.createElement('div');
-        panel.id = 'debug-panel';
-        panel.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.9);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 11px;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 300px;
-            max-height: 400px;
-            overflow-y: auto;
-            z-index: 999999;
-            border: 1px solid #0f0;
-        `;
-        document.body.appendChild(panel);
-        this.debugPanel = panel;
-    }
-
-    addDebugMessage(msg) {
-        if (!this.debugPanel) return;
-        const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        line.style.marginBottom = '3px';
-        this.debugPanel.appendChild(line);
-        this.debugPanel.scrollTop = this.debugPanel.scrollHeight;
     }
 }
 window.farkle = new FarkleClient();
