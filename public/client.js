@@ -215,40 +215,18 @@ class FarkleClient {
             await this.discordSdk.ready();
 
             // Authorize with Discord Client
-            // Try explicit silent first. If it fails, we might need a prompt (rare for embedded apps but possible).
-            // Actually, for embedded apps, 'prompt: none' is standard for automatic auth,
-            // but if user hasn't authorized, it throws.
-            // Better strategy: Try silent, if catch, try consent.
-
-            let authResponse;
-            try {
-                authResponse = await this.discordSdk.commands.authorize({
-                    client_id: DISCORD_CLIENT_ID,
-                    response_type: "code",
-                    state: "",
-                    prompt: "none",
-                    scope: [
-                        "identify",
-                        "guilds",
-                        "guilds.members.read"
-                    ],
-                });
-            } catch (e) {
-                console.warn("Silent auth failed, trying with consent prompt...", e);
-                authResponse = await this.discordSdk.commands.authorize({
-                    client_id: DISCORD_CLIENT_ID,
-                    response_type: "code",
-                    state: "",
-                    prompt: "consent",
-                    scope: [
-                        "identify",
-                        "guilds",
-                        "guilds.members.read"
-                    ],
-                });
-            }
-
-            const { code } = authResponse;
+            // Let Discord SDK handle prompting intelligently
+            const { code } = await this.discordSdk.commands.authorize({
+                client_id: DISCORD_CLIENT_ID,
+                response_type: "code",
+                state: "",
+                // No prompt specified = SDK decides (smart behavior)
+                scope: [
+                    "identify",
+                    "guilds",
+                    "guilds.members.read"
+                ],
+            });
 
             // Exchange code for token via backend
             const response = await fetch("/api/token", {
