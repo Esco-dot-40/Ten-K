@@ -47,27 +47,67 @@ export const analytics = {
         const uaParser = new UAParser(uaString);
         const geo = geoip.lookup(ip);
 
+        // Log for debugging
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[ANALYTICS] IP:', ip, 'Geo:', geo);
+        }
+
+        // Device type detection
+        const device = uaParser.getDevice();
+        let deviceType = 'Desktop';
+        if (device.type === 'mobile') deviceType = 'Mobile';
+        else if (device.type === 'tablet') deviceType = 'Tablet';
+
+        // Traffic source detection
+        const referrer = req.headers['referer'] || req.headers['referrer'] || 'Direct';
+        let trafficSource = 'Direct';
+        if (referrer !== 'Direct') {
+            try {
+                const refUrl = new URL(referrer);
+                trafficSource = refUrl.hostname;
+            } catch (e) {
+                trafficSource = 'Unknown';
+            }
+        }
+
+        // Session tracking (using cookies if available)
+        const sessionId = req.headers['cookie']?.match(/farkle_session=([^;]+)/)?.[1] ||
+            `session_${Date.now()}_${Math.random().toString(36)}`;
+
+        // Check if returning visitor (basic heuristic: same IP in last 30 days)
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const isReturning = analyticsData.hits.some(h =>
+            h.ip === ip && h.timestamp > thirtyDaysAgo
+        );
+
         const hit = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2),
             timestamp: Date.now(),
             path: req.path,
-            ip: ip, // In production, might want to hash this for privacy, but user asked for IP
+            ip: ip,
+            sessionId: sessionId,
+            isReturning: isReturning,
+            deviceType: deviceType,
+            trafficSource: trafficSource,
+            referrer: referrer,
             geo: geo ? {
                 country: geo.country,
                 region: geo.region,
                 city: geo.city,
+                timezone: geo.timezone,
                 ll: geo.ll // [lat, long]
             } : null,
             ua: {
                 browser: uaParser.getBrowser(),
                 os: uaParser.getOS(),
-                device: uaParser.getDevice()
+                device: uaParser.getDevice(),
+                engine: uaParser.getEngine()
             }
         };
 
         analyticsData.hits.push(hit);
 
-        // Trim history if needed (e.g. keep last 10000)
+        // Trim history if needed
         if (analyticsData.hits.length > 20000) {
             analyticsData.hits = analyticsData.hits.slice(-10000);
         }

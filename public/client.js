@@ -188,16 +188,16 @@ class FarkleClient {
             const savedToken = localStorage.getItem('farkle_auth_token');
             const savedUser = localStorage.getItem('farkle_user_data');
 
+            console.log('[DISCORD-AUTH] localStorage check:', { hasToken: !!savedToken, hasUser: !!savedUser });
+
             if (savedToken && savedUser) {
+                console.log('[DISCORD-AUTH] Found saved session, attempting restore');
                 try {
                     const user = JSON.parse(savedUser);
                     this.playerName = user.global_name || user.username;
                     this.discordId = user.id;
                     this.debugLog(`Restored session for ${this.playerName}`);
-
-                    // Verify token validity with backend (optional but recommended)
-                    // For speed, we trust local first, then verify async if needed.
-                    // Or just proceed.
+                    console.log('[DISCORD-AUTH] ✅ Restored from localStorage, calling showWelcome');
 
                     // Show Welcome
                     this.showWelcome(this.playerName, user.avatar, user.id);
@@ -206,10 +206,12 @@ class FarkleClient {
                     this.identifyAnalytics(user);
                     return;
                 } catch (e) {
-                    console.warn("Invalid saved session", e);
+                    console.warn("[DISCORD-AUTH] ❌ Invalid saved session", e);
                     localStorage.removeItem('farkle_auth_token');
-                    localStorage.removeItem('farkle_user_data'); // Also remove user data
+                    localStorage.removeItem('farkle_user_data');
                 }
+            } else {
+                console.log('[DISCORD-AUTH] ⚠️ No saved session, proceeding with full OAuth');
             }
 
             // 2. Proceed with Discord SDK Auth if no session
