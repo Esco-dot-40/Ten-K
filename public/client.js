@@ -11,8 +11,7 @@ import { calculateScore, isScoringSelection } from './rules.js';
 // Discord SDK integration refactored to use dynamic import
 
 // Global reference
-const DISCORD_CLIENT_ID = '1317075677927768074';
-
+const DISCORD_CLIENT_ID = "1455067365694771364"; // Replace with your Application ID
 console.log("Farkle Client Execution Started");
 
 class FarkleClient {
@@ -411,10 +410,15 @@ class FarkleClient {
                 <div class="modal-content">
                     <h2>Statistics</h2>
                     <div class="modal-content-body" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;"></div>
-                    <button class="btn close-modal" onclick="document.getElementById('stats-modal').classList.add('hidden')">Close</button>
+                    <button class="btn close-modal">Close</button>
                 </div>
             `;
             document.body.appendChild(modal);
+
+            // Attach listener
+            modal.querySelector('.close-modal').addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
         }
         return modal;
     }

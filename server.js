@@ -76,7 +76,7 @@ app.post('/api/token', async (req, res) => {
     try {
         // 1. Exchange Code for Access Token
         const params = new URLSearchParams({
-            client_id: process.env.DISCORD_CLIENT_ID || '1317075677927768074',
+            client_id: process.env.DISCORD_CLIENT_ID || '1455067365694771364',
             client_secret: process.env.DISCORD_CLIENT_SECRET,
             grant_type: 'authorization_code',
             code,
