@@ -131,7 +131,6 @@ class FarkleClient {
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
-            try { this.initSimpleBackground(); } catch (e) { console.error("Background Init Failed", e); }
             try { this.initHistory(); } catch (e) { console.error("History Init Failed", e); }
             this.debugLog("Modules initialized");
             // Fall through to Discord Init immediately
@@ -161,6 +160,10 @@ class FarkleClient {
             // Check if running in iframe (Discord env) - simplistic check
             if (window.self === window.top && !window.location.search.includes('frame_id')) {
                 this.debugLog("Not in Discord (Standalone). Using Random Name.");
+                // Show welcome screen anyway for testing
+                setTimeout(() => {
+                    this.showWelcome(this.playerName, null, null);
+                }, 500);
                 return;
             }
 
