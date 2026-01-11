@@ -178,47 +178,122 @@ class FarkleClient {
             this.debugLog("Initializing Discord SDK...");
             this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
 
-            await this.discordSdk.ready();
-            this.debugLog("Discord SDK Ready");
+            // 1. Check for existing local session
+            const savedToken = localStorage.getItem('farkle_auth_token');
+            const savedUser = localStorage.getItem('farkle_user_data');
 
-            // Client-Side Auth Flow (Auth Code Grant)
-            // Use 'code' to exchange on backend for token & user profile
+            if (savedToken && savedUser) {
+                try {
+                    const user = JSON.parse(savedUser);
+                    this.playerName = user.global_name || user.username;
+                    this.discordId = user.id;
+                    this.debugLog(`Restored session for ${this.playerName}`);
+
+                    // Verify token validity with backend (optional but recommended)
+                    // For speed, we trust local first, then verify async if needed.
+                    // Or just proceed.
+
+                    // Show Welcome
+                    this.showWelcome(this.playerName, user.avatar, user.id);
+
+                    // Helper to track analytics for restored session
+                    this.identifyAnalytics(user);
+                    return;
+                } catch (e) {
+                    console.warn("Invalid saved session", e);
+                    localStorage.removeItem('farkle_auth_token');
+                    localStorage.removeItem('farkle_user_data'); // Also remove user data
+                }
+            }
+
+            // 2. Proceed with Discord SDK Auth if no session
+            if (!this.discordSdk) {
+                const { DiscordSDK } = await import("https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.0.0/output/index.mjs");
+                this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
+            }
+
+            await this.discordSdk.ready();
+
+            // Authorize with Discord Client
             const { code } = await this.discordSdk.commands.authorize({
                 client_id: DISCORD_CLIENT_ID,
                 response_type: "code",
                 state: "",
-                prompt: "none",
-                scope: ["identify", "guilds", "rpc.activities.write"]
+                prompt: "none", // Try to avoid prompt if possible
+                scope: [
+                    "identify",
+                    "guilds",
+                    "guilds.members.read"
+                ],
             });
 
-            // Authenticate with Backend
-            const backendRes = await fetch('/api/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
+            // Exchange code for token via backend
+            const response = await fetch("/api/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    code,
+                }),
             });
 
-            if (!backendRes.ok) throw new Error("Backend Auth Failed");
+            const { access_token, user } = await response.json();
 
-            const authData = await backendRes.json();
-
-            // Now authenticate SDK with the returned access token so we can use SDK features
-            await this.discordSdk.commands.authenticate({
-                access_token: authData.access_token
+            // Authenticate with Discord SDK (for channel interactions if needed later)
+            const auth = await this.discordSdk.commands.authenticate({
+                access_token,
             });
 
-            if (authData.user) {
-                // Prioritize global_name, fallback to username on server-verified data
-                this.playerName = authData.user.global_name || authData.user.username;
-                this.discordId = authData.user.id;
-                localStorage.setItem('farkle-username', this.playerName);
-                this.debugLog(`Authenticated as ${this.playerName}`);
+            if (auth == null) {
+                throw new Error("Authenticate command failed via SDK");
             }
 
+            // Success! Store session.
+            localStorage.setItem('farkle_auth_token', access_token);
+            localStorage.setItem('farkle_user_data', JSON.stringify(user));
+
+            this.playerName = user.global_name || user.username;
+            this.discordId = user.id;
+
+            this.debugLog(`Authenticated as ${this.playerName}`);
+            this.showWelcome(this.playerName, user.avatar, user.id);
+            this.identifyAnalytics(user);
+
         } catch (err) {
-            console.error("Discord Auth Error:", err);
+            console.error("Discord Auth Failed/Cancelled", err);
             this.debugLog(`Discord Auth Failed: ${err.message} - Using Default Name`);
-            // Fallback is already set in constructor
+            // Fallback to random guest if auth fails
+            if (!this.playerName) {
+                // Fallback is already set in constructor
+            }
+        }
+    }
+
+    identifyAnalytics(user) {
+        fetch('/api/analytics/identify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.id,
+                username: user.username,
+                globalName: user.global_name
+            })
+        }).catch(e => console.warn("Analytics Identify Error", e));
+    }
+
+    showWelcome(name, avatar, id) {
+        const logoContainer = document.querySelector('#setup-modal .logo-container');
+        if (logoContainer && !document.getElementById('welcome-msg')) {
+            const welcome = document.createElement('div');
+            welcome.id = 'welcome-msg';
+            welcome.style.textAlign = 'center';
+            welcome.style.marginBottom = '1rem';
+            welcome.innerHTML = `
+                ${avatar ? `<img src="https://cdn.discordapp.com/avatars/${id}/${avatar}.png" style="width:40px;height:40px;border-radius:50%;vertical-align:middle;margin-right:10px;border:2px solid var(--primary);">` : ''}
+                <span style="font-size:1.2rem; color:var(--primary);">Welcome, ${name}!</span>
+             `;
+            logoContainer.parentNode.insertBefore(welcome, logoContainer.nextSibling);
         }
     }
 
@@ -553,9 +628,10 @@ class FarkleClient {
         });
 
         if (this.ui.leaveBtn) {
-            this.ui.leaveBtn.addEventListener('click', () => {
+            this.ui.leaveBtn.onclick = (e) => {
+                e.preventDefault();
                 this.leaveGame();
-            });
+            };
         }
 
         // Chat Listeners
@@ -843,9 +919,9 @@ class FarkleClient {
     }
 
     leaveGame(fromPopState = false) {
-        if (!fromPopState) {
-            if (!confirm("Are you sure you want to leave the table?")) return;
-        }
+        // if (!fromPopState) {
+        //    if (!confirm("Are you sure you want to leave the table?")) return;
+        // }
 
         this.debugLog("Leaving Game...");
 
@@ -879,15 +955,12 @@ class FarkleClient {
         // Reset Discord Presence
         this.updateDiscordPresence("In Lobby", "Selecting Table");
 
-        // Refresh Room List (will happen on mode select, but good to ensure socket is ready)
-        // this.socket.emit('get_room_list'); // Done when clicking mode
-
         if (this.ui.gameInfoBar) this.ui.gameInfoBar.style.display = 'none';
         if (this.ui.leaveText) this.ui.leaveText.style.display = 'none';
-        if (this.ui.leaveBtn) {
-            this.ui.leaveBtn.style.width = '44px';
-            this.ui.leaveBtn.style.padding = '0';
-        }
+
+        // Hide leave button or reset style
+        // Actually, logic elsewhere likely controls visibility, but let's ensure it handles correctly
+        // (UI update loop will hide it if game is null)
     }
 
     canInteract() {

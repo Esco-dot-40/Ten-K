@@ -13,10 +13,30 @@ const app = express();
 app.enable("trust proxy");
 app.use(express.json()); // Enable JSON body parsing for login
 
-// Analytics Middleware
+// Middleware to track analytics
 app.use((req, res, next) => {
+    // Try to get user info if auth token was processed this request (unlikely for assets)
+    // Or check if it's an API call where we passed ID?
+    // For now, simple page hit tracking.
+    // Enhanced: check for 'x-farkle-user' header if we start sending it?
+    // Better: Allow client to send an analytics 'identify' event.
+
     analytics.trackHit(req);
     next();
+});
+
+// New Endpoint: Identify User for Analytics
+app.post('/api/analytics/identify', (req, res) => {
+    const { userId, username, globalName } = req.body;
+    if (userId) {
+        // Here we could update the last analytics hit with this user info
+        // or just log an 'identify' event.
+        // For simplicity, we'll log it to console or extend analytics module later.
+        console.log(`[Analytics] Identified User: ${globalName} (${username}) [${userId}]`);
+
+        // TODO: Store this association in DB analytics later if needed.
+    }
+    res.json({ success: true });
 });
 
 const httpServer = createServer(app);
@@ -77,7 +97,7 @@ app.post('/api/token', async (req, res) => {
         // 1. Exchange Code for Access Token
         const params = new URLSearchParams({
             client_id: process.env.DISCORD_CLIENT_ID || '1455067365694771364',
-            client_secret: process.env.DISCORD_CLIENT_SECRET,
+            client_secret: process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET,
             grant_type: 'authorization_code',
             code,
             // IMPORTANT: In embedded apps, redirect_uri usually needs to match 
