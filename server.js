@@ -91,16 +91,19 @@ app.post('/api/token', async (req, res) => {
 
     try {
         // 1. Exchange Code for Access Token
-        const params = new URLSearchParams({
+        const paramsData = {
             client_id: process.env.DISCORD_CLIENT_ID || '1455067365694771364',
-            client_secret: process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET,
+            client_secret: secret,
             grant_type: 'authorization_code',
-            code,
-            // Match the redirect_uri used in the client
-            redirect_uri: redirectUri || `https://${req.headers.host}`
-            // Warning: If running mainly in Discord Activity, redirect_uri might need to be specific URL configured in portal.
-            // If it fails with 'invalid_grant', check this.
-        });
+            code
+        };
+
+        // Only include redirect_uri if provided by client or specifically needed
+        if (redirectUri) {
+            paramsData.redirect_uri = redirectUri;
+        }
+
+        const params = new URLSearchParams(paramsData);
 
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',

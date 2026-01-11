@@ -254,15 +254,15 @@ class FarkleClient {
                 throw readyErr;
             }
 
+            this.addDebugMessage(`🔗 URL: ${window.location.href.split('?')[0]}`);
             this.addDebugMessage('🔑 Authorizing...');
             // Authorize with Discord Client
-            // Let Discord SDK handle prompting intelligently
+            // Removing prompt: none and redirect_uri to let Discord use its defaults
+            // and avoid RPC bridge rejection issues.
             const { code } = await this.discordSdk.commands.authorize({
                 client_id: DISCORD_CLIENT_ID,
                 response_type: "code",
                 state: "",
-                prompt: "none", // Force silent if possible
-                redirect_uri: window.location.origin + window.location.pathname,
                 scope: [
                     "identify",
                     "guilds",
@@ -279,8 +279,7 @@ class FarkleClient {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    code,
-                    redirectUri: window.location.origin + window.location.pathname
+                    code
                 }),
             });
 
