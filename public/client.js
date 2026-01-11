@@ -182,13 +182,22 @@ class FarkleClient {
             this.debugLog("Loading Discord SDK...");
             let DiscordSDK;
             try {
-                // Dynamic Import (CDN is more reliable if local libs missing)
-                const module = await import("https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1.0.0/output/index.mjs");
+                // Use local path as CDN might be blocked by Discord CSP
+                const module = await import("/libs/@discord/embedded-app-sdk/output/index.mjs");
                 DiscordSDK = module.DiscordSDK;
+                this.addDebugMessage('✅ Discord SDK Loaded');
             } catch (importErr) {
                 this.debugLog(`SDK Import Failed: ${importErr.message}`);
                 this.addDebugMessage(`❌ SDK Import Failed: ${importErr.message}`);
-                return; // Fallback to Player N
+                // Try fallback to unpkg if local fails, but local is preferred
+                try {
+                    const fallback = await import("https://unpkg.com/@discord/embedded-app-sdk/output/index.mjs");
+                    DiscordSDK = fallback.DiscordSDK;
+                    this.addDebugMessage('⚠️ Loaded via unpkg fallback');
+                } catch (e2) {
+                    this.addDebugMessage(`❌ All SDK loads failed: ${e2.message}`);
+                    return;
+                }
             }
 
             this.debugLog("Initializing Discord SDK...");
