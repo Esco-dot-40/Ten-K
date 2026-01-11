@@ -194,10 +194,7 @@ class FarkleClient {
                     this.playerName = user.global_name || user.username;
                     this.discordId = user.id;
                     this.debugLog(`Restored session for ${this.playerName}`);
-
-                    // Verify token validity with backend (optional but recommended)
-                    // For speed, we trust local first, then verify async if needed.
-                    // Or just proceed.
+                    console.log('[DISCORD-AUTH] Restored from localStorage, calling showWelcome');
 
                     // Show Welcome
                     this.showWelcome(this.playerName, user.avatar, user.id);
