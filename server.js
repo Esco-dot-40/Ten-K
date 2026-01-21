@@ -144,11 +144,22 @@ app.post('/api/token', async (req, res) => {
 // Web Discord Auth Routes
 app.get('/api/access/auth/discord', (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
+
+    // Priority: .env > Dynamic Detection
     let redirectUri = process.env.DISCORD_CALLBACK_URL;
     if (!redirectUri) {
+        let host = req.get('host');
         const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-        redirectUri = `${protocol}://${req.get('host')}/api/access/auth/discord/callback`;
+
+        // Ensure we use the public custom domain if detected
+        if (host.includes('velarixsolutions.nl') || host.includes('farkle')) host = 'farkle.velarixsolutions.nl';
+        if (host.includes('veroe.space')) host = 'veroe.space';
+
+        redirectUri = `${protocol}://${host}/api/access/auth/discord/callback`;
     }
+
+    console.log(`[Auth] Initiating Discord Login. Detected Host: ${req.get('host')}, Env: ${process.env.DISCORD_CALLBACK_URL ? 'set' : 'not set'}, Final URI: ${redirectUri}`);
+
     const scope = encodeURIComponent('identify guilds guilds.members.read');
     const url = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
     res.redirect(url);
@@ -160,11 +171,19 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
 
     const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
     const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
+
     let redirectUri = process.env.DISCORD_CALLBACK_URL;
     if (!redirectUri) {
+        let host = req.get('host');
         const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-        redirectUri = `${protocol}://${req.get('host')}/api/access/auth/discord/callback`;
+
+        if (host.includes('velarixsolutions.nl') || host.includes('farkle')) host = 'farkle.velarixsolutions.nl';
+        if (host.includes('veroe.space')) host = 'veroe.space';
+
+        redirectUri = `${protocol}://${host}/api/access/auth/discord/callback`;
     }
+
+    console.log(`[Auth] Callback Received. URI used for exchange: ${redirectUri}`);
 
     try {
         const params = new URLSearchParams({
