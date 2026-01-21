@@ -19,13 +19,21 @@ class FarkleClient {
 
 
         // Create on-screen debug panel
-        this.createDebugPanel();
-        this.addDebugMessage('✨ Farkle Engine Starting...');
+        try {
+            this.createDebugPanel();
+            this.addDebugMessage('✨ Farkle Engine Starting...');
+        } catch (e) {
+            console.error('Debug panel initialization failed:', e);
+        }
 
         // Default to random player name until Discord loads
-        const loadingContainer = document.getElementById('connection-debug');
-        if (loadingContainer) {
-            loadingContainer.textContent = "Script Running...";
+        try {
+            const loadingContainer = document.getElementById('connection-debug');
+            if (loadingContainer) {
+                loadingContainer.textContent = "Script Running...";
+            }
+        } catch (e) {
+            console.error('Loading container update failed:', e);
         }
         window.onerror = (msg, url, line) => {
             this.debugLog(`JS Error: ${msg} at ${line}`);
@@ -1635,59 +1643,76 @@ class FarkleClient {
     }
 
     createDebugPanel() {
-        // Remove existing if any
-        const existing = document.getElementById('debug-panel');
-        if (existing) existing.remove();
+        try {
+            // Remove existing if any
+            const existing = document.getElementById('debug-panel');
+            if (existing) existing.remove();
 
-        const panel = document.createElement('div');
-        panel.id = 'debug-panel';
-        panel.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(10, 10, 15, 0.7);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            color: #00f2ff;
-            font-family: 'Outfit', 'Inter', sans-serif;
-            font-size: 10px;
-            letter-spacing: 0.5px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            max-width: 240px;
-            max-height: 120px;
-            overflow: hidden;
-            z-index: 10000;
-            border: 1px solid rgba(0, 242, 255, 0.2);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
-            pointer-events: none;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-        `;
-        document.body.appendChild(panel);
-        this.debugPanel = panel;
+            if (!document.body) {
+                console.warn('Document body not ready for debug panel');
+                return;
+            }
+
+            const panel = document.createElement('div');
+            panel.id = 'debug-panel';
+            panel.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: rgba(10, 10, 15, 0.7);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                color: #00f2ff;
+                font-family: 'Outfit', 'Inter', sans-serif;
+                font-size: 10px;
+                letter-spacing: 0.5px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                max-width: 240px;
+                max-height: 120px;
+                overflow: hidden;
+                z-index: 10000;
+                border: 1px solid rgba(0, 242, 255, 0.2);
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
+                pointer-events: none;
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+            `;
+            document.body.appendChild(panel);
+            this.debugPanel = panel;
+        } catch (e) {
+            console.error('Failed to create debug panel:', e);
+            this.debugPanel = null;
+        }
     }
 
     addDebugMessage(msg) {
-        if (!this.debugPanel) return;
-        const line = document.createElement('div');
-        line.style.cssText = `
-            margin-bottom: 2px;
-            opacity: 0.9;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            animation: fadeIn 0.3s ease-out;
-        `;
-        line.textContent = `> ${msg}`;
+        try {
+            if (!this.debugPanel) {
+                console.log(`[SYSTEM] ${msg}`);
+                return;
+            }
+            const line = document.createElement('div');
+            line.style.cssText = `
+                margin-bottom: 2px;
+                opacity: 0.9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                animation: fadeIn 0.3s ease-out;
+            `;
+            line.textContent = `> ${msg}`;
 
-        // Keep only last 4 messages for minimalism
-        while (this.debugPanel.children.length >= 4) {
-            this.debugPanel.removeChild(this.debugPanel.firstChild);
+            // Keep only last 4 messages for minimalism
+            while (this.debugPanel.children.length >= 4) {
+                this.debugPanel.removeChild(this.debugPanel.firstChild);
+            }
+
+            this.debugPanel.appendChild(line);
+            console.log(`[SYSTEM] ${msg}`);
+        } catch (e) {
+            console.error('Failed to add debug message:', e);
         }
-
-        this.debugPanel.appendChild(line);
-        console.log(`[SYSTEM] ${msg}`);
     }
 }
 
@@ -2141,4 +2166,31 @@ class Dice3DManager {
         });
     }
 }
-window.farkle = new FarkleClient();
+
+// Wait for DOM to be fully loaded before initializing
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            window.farkle = new FarkleClient();
+        } catch (e) {
+            console.error('Failed to initialize Farkle Client:', e);
+            const errorEl = document.getElementById('global-error-display');
+            if (errorEl) {
+                errorEl.style.display = 'block';
+                errorEl.textContent = `Critical error: ${e.message}\n\nPlease refresh the page.`;
+            }
+        }
+    });
+} else {
+    // DOM already loaded
+    try {
+        window.farkle = new FarkleClient();
+    } catch (e) {
+        console.error('Failed to initialize Farkle Client:', e);
+        const errorEl = document.getElementById('global-error-display');
+        if (errorEl) {
+            errorEl.style.display = 'block';
+            errorEl.textContent = `Critical error: ${e.message}\n\nPlease refresh the page.`;
+        }
+    }
+}
