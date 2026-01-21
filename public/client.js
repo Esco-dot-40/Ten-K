@@ -96,7 +96,10 @@ class FarkleClient {
                 spectatorDisplay: document.getElementById('spectator-display'),
                 gameInfoBar: document.getElementById('game-info-bar'),
                 leaveText: document.getElementById('leave-text'),
-                chatNotifications: document.getElementById('chat-notifications')
+                chatNotifications: document.getElementById('chat-notifications'),
+                volumeSlider: document.getElementById('volume-slider'),
+                muteBtn: document.getElementById('mute-btn'),
+                volumeIcon: document.getElementById('volume-icon')
             };
 
             // Hook up start button
@@ -436,7 +439,6 @@ class FarkleClient {
     }
 
     initSettings() {
-        // Theme Buttons
         if (this.ui.settingsBtn) {
             this.ui.settingsBtn.addEventListener('click', () => {
                 this.ui.settingsModal.classList.remove('hidden');
@@ -449,10 +451,9 @@ class FarkleClient {
             });
         }
 
-        // Stats Buttons (New)
         this.initStatsUI();
 
-        // Color Themes
+        // Felt Color
         const themeBtns = document.querySelectorAll('.theme-btn');
         themeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -461,38 +462,71 @@ class FarkleClient {
                 if (theme === 'blue') color = '#1e3a8a';
                 if (theme === 'red') color = '#7f1d1d';
                 if (theme === 'purple') color = '#581c87';
-
-                document.body.style.setProperty('--bg-panel', this.styleHexToRgba(color, 0.75));
-                document.body.style.setProperty('--bg-panel-solid', color);
+                document.body.style.background = color;
+                themeBtns.forEach(b => b.classList.toggle('active', b === btn));
+                this.sounds.play('click');
             });
         });
 
-        // Dice Themes
-        const diceSelect = document.getElementById('dice-theme-select');
+        // Dice Theme
+        const diceSelect = this.ui.diceThemeSelect;
         if (diceSelect) {
             const savedTheme = localStorage.getItem('farkle-dice-theme') || 'classic';
             diceSelect.value = savedTheme;
             document.body.setAttribute('data-dice-theme', savedTheme);
-            if (this.dice3D) this.dice3D.materialCache.clear();
 
             diceSelect.addEventListener('change', (e) => {
                 const val = e.target.value;
                 document.body.setAttribute('data-dice-theme', val);
                 localStorage.setItem('farkle-dice-theme', val);
-                if (this.dice3D) {
-                    this.dice3D.materialCache.clear();
-                    this.dice3D.updateDiceMaterials();
-                }
+                if (this.dice3D) this.dice3D.materialCache.clear();
+                this.sounds.play('click');
             });
+        }
+
+        // --- Audio Settings ---
+        if (this.ui.volumeSlider) {
+            this.ui.volumeSlider.addEventListener('input', (e) => {
+                const vol = parseFloat(e.target.value);
+                this.sounds.masterVolume = vol;
+                localStorage.setItem('farkle_volume', vol);
+                this.updateVolumeIcon(vol);
+            });
+        }
+
+        if (this.ui.muteBtn) {
+            this.ui.muteBtn.addEventListener('click', () => {
+                const isMuted = !this.sounds.enabled;
+                this.sounds.enabled = !isMuted;
+                this.ui.muteBtn.classList.toggle('active', isMuted);
+                this.updateVolumeIcon(isMuted ? 0 : this.sounds.masterVolume);
+                this.sounds.play('click');
+            });
+        }
+
+        // Restore Volume
+        const savedVol = localStorage.getItem('farkle_volume');
+        if (savedVol !== null && this.ui.volumeSlider) {
+            const vol = parseFloat(savedVol);
+            this.ui.volumeSlider.value = vol;
+            this.sounds.masterVolume = vol;
+            this.updateVolumeIcon(vol);
+        }
+    }
+
+    updateVolumeIcon(vol) {
+        if (!this.ui.volumeIcon) return;
+        if (vol <= 0 || !this.sounds.enabled) {
+            this.ui.volumeIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l5 5m0-5l-5 5"></path><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>`;
+        } else {
+            this.ui.volumeIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         }
     }
 
     initStatsUI() {
-        // Find or create buttons in main menu
         const modeSelection = document.getElementById('mode-selection');
         if (!modeSelection) return;
 
-        // Container for stats buttons
         let statsRow = document.getElementById('stats-row');
         if (!statsRow) {
             statsRow = document.createElement('div');
@@ -503,7 +537,7 @@ class FarkleClient {
             statsRow.style.marginTop = '2rem';
             modeSelection.appendChild(statsRow);
         }
-        statsRow.innerHTML = ''; // Clear to prevent dupes
+        statsRow.innerHTML = '';
 
         const lbBtn = document.createElement('button');
         lbBtn.className = 'btn secondary small';
@@ -520,7 +554,6 @@ class FarkleClient {
     }
 
     async showLeaderboard() {
-        // Reuse or create modal
         const modal = this.getStatsModal();
         const content = modal.querySelector('.modal-content-body');
         content.innerHTML = '<p>Loading...</p>';
@@ -556,9 +589,7 @@ class FarkleClient {
         modal.classList.remove('hidden');
 
         if (!this.discordId) {
-            // Fallback: try to see if we are in "mock" mode or just not authed
             if (this.discordSdk && this.discordSdk.mock) {
-                // Mock ID
                 this.discordId = "mock_user_123";
             } else {
                 content.innerHTML = "<p>Please play via Discord Activity to view stats.</p>";
@@ -602,8 +633,7 @@ class FarkleClient {
                 </div>
             `;
         } catch (e) {
-            console.error(e);
-            content.innerHTML = `<p>No stats found yet. Play a game to track stats!</p><p style="font-size:0.75rem; color:#666; margin-top:10px;">Debug ID: ${this.discordId || "Not Authenticated"}</p>`;
+            content.innerHTML = `<p>No stats found yet. Play a game to track stats!</p>`;
         }
     }
 
@@ -613,7 +643,6 @@ class FarkleClient {
             modal = document.createElement('div');
             modal.id = 'stats-modal';
             modal.className = 'modal hidden';
-            // Force high z-index and pointer interaction
             modal.style.zIndex = "99999";
             modal.style.pointerEvents = "auto";
 
@@ -621,21 +650,15 @@ class FarkleClient {
                 <div class="modal-content" style="pointer-events: auto;">
                     <h2>Statistics</h2>
                     <div class="modal-content-body" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;"></div>
-                    <button class="btn close-modal" id="stats-close-btn">Close</button>
+                    <button class="btn close-modal">Close</button>
                 </div>
             `;
             document.body.appendChild(modal);
-        }
-
-        // Re-attach listener every time to be safe, removing old one if needed (cloning node is a cheap way to strip listeners, but simpler just to overwrite onclick)
-        const closeBtn = modal.querySelector('.close-modal');
-        if (closeBtn) {
-            closeBtn.onclick = () => {
+            modal.querySelector('.close-modal').onclick = () => {
                 modal.classList.add('hidden');
                 this.sounds.play('click');
             };
         }
-
         return modal;
     }
 
@@ -1075,6 +1098,24 @@ class FarkleClient {
         // (UI update loop will hide it if game is null)
     }
 
+    updateGameState(state) {
+        if (!state) return;
+        this.gameState = state;
+        this.rules = state.rules;
+
+        this.renderPlayers();
+        this.renderDice(state.currentDice || []);
+        this.renderControls();
+        this.checkGameOver(state);
+
+        // Presence Update
+        const currentPlayer = state.players[state.currentPlayerIndex];
+        if (currentPlayer) {
+            const status = this.canInteract() ? "YOUR TURN" : (state.gameStatus === 'playing' ? `Waiting for ${currentPlayer.name}` : "Waiting to Start");
+            this.updateDiscordPresence(`Table: ${this.roomCode}`, status);
+        }
+    }
+
     canInteract() {
         if (this.isSpectator) return false;
         if (!this.gameState || this.gameState.gameStatus !== 'playing') return false;
@@ -1089,46 +1130,35 @@ class FarkleClient {
         if (!container) return;
 
         const players = this.gameState.players;
+        // Efficient rendering: sync child count
+        while (container.children.length < players.length) {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            const nameEl = document.createElement('div');
+            nameEl.className = 'player-info';
+            const scoreEl = document.createElement('div');
+            scoreEl.className = 'total-score';
+            card.appendChild(nameEl);
+            card.appendChild(scoreEl);
+            container.appendChild(card);
+        }
         while (container.children.length > players.length) {
             container.removeChild(container.lastChild);
         }
 
         players.forEach((player, index) => {
-            let card = container.children[index];
+            const card = container.children[index];
             const isCurrent = this.gameState.currentPlayerIndex === index && this.gameState.gameStatus === 'playing';
 
-            if (!card) {
-                card = document.createElement('div');
-                card.className = 'player-card';
-                card.style.minWidth = "150px";
-                if (index === this.gameState.currentPlayerIndex) card.classList.add('active'); // Preload active
-
-                const info = document.createElement('div');
-                info.className = 'player-info';
-
-                const name = document.createElement('span');
-                name.className = 'player-name';
-                info.appendChild(name);
-
-                const scoreDiv = document.createElement('div');
-                scoreDiv.className = 'total-score';
-
-                card.appendChild(info);
-                card.appendChild(scoreDiv);
-                container.appendChild(card);
-            }
-
-            const nameEl = card.querySelector('.player-name');
+            const nameEl = card.querySelector('.player-info');
             const scoreEl = card.querySelector('.total-score');
-            if (nameEl && nameEl.textContent !== player.name) nameEl.textContent = player.name;
-            if (scoreEl && scoreEl.textContent != player.score) scoreEl.textContent = player.score;
 
-            const isActive = card.classList.contains('active');
-            if (isCurrent && !isActive) card.classList.add('active');
-            if (!isCurrent && isActive) card.classList.remove('active');
+            if (nameEl.textContent !== player.name) nameEl.textContent = player.name;
+            const formattedScore = (player.score || 0).toLocaleString();
+            if (scoreEl.textContent !== formattedScore) scoreEl.textContent = formattedScore;
 
-            const targetOpacity = player.connected ? "1" : "0.5";
-            if (card.style.opacity !== targetOpacity) card.style.opacity = targetOpacity;
+            card.classList.toggle('active', isCurrent);
+            card.style.opacity = player.connected ? "1" : "0.5";
         });
     }
 
@@ -1233,7 +1263,7 @@ class FarkleClient {
             return;
         }
 
-        // --- Debug Panel ---
+        // --- Game Actions Panel (formerly Debug) ---
         let debugPanel = document.getElementById('debug-panel');
         if (!debugPanel && this.ui.bankBtn.parentElement && this.ui.bankBtn.parentElement.parentElement) {
             debugPanel = document.createElement('div');
@@ -1241,25 +1271,59 @@ class FarkleClient {
             debugPanel.className = 'tools-panel';
 
             const forceBtn = document.createElement('button');
+            forceBtn.id = 'force-next-action-btn';
             forceBtn.className = 'btn micro';
             forceBtn.textContent = 'Force Next';
-            forceBtn.onclick = () => this.socket.emit('force_next_turn', { roomCode: this.roomCode });
 
             const restartBtn = document.createElement('button');
+            restartBtn.id = 'force-reset-action-btn';
             restartBtn.className = 'btn micro';
             restartBtn.textContent = 'Reset';
-            restartBtn.onclick = () => {
-                if (confirm("Restart game?")) this.socket.emit('debug_restart_preserve', { roomCode: this.roomCode });
-            };
 
             debugPanel.appendChild(forceBtn);
             debugPanel.appendChild(restartBtn);
             this.ui.bankBtn.parentElement.parentElement.appendChild(debugPanel);
-            // Host Checks
-            if (this.gameState.hostId === this.socket.id) {
-                debugPanel.style.display = 'block';
+        }
+
+        if (debugPanel) {
+            debugPanel.style.display = 'block'; // Always show now
+            const forceBtn = document.getElementById('force-next-action-btn');
+            const restartBtn = document.getElementById('force-reset-action-btn');
+
+            const activeVote = this.gameState.activeVote;
+
+            // Handle Force Next Button
+            if (activeVote && activeVote.type === 'next') {
+                const voted = activeVote.voters.includes(this.socket.id);
+                forceBtn.textContent = voted ? `Next (${activeVote.count}/${activeVote.needed})` : `Vote Next (${activeVote.count}/${activeVote.needed})`;
+                forceBtn.classList.toggle('active', voted);
+                forceBtn.onclick = () => {
+                    if (!voted) this.socket.emit('cast_vote', { roomCode: this.roomCode });
+                };
             } else {
-                debugPanel.style.display = 'none';
+                forceBtn.textContent = 'Force Next';
+                forceBtn.classList.remove('active');
+                forceBtn.onclick = () => {
+                    this.socket.emit('start_vote', { roomCode: this.roomCode, type: 'next' });
+                };
+            }
+
+            // Handle Reset Button
+            if (activeVote && activeVote.type === 'reset') {
+                const voted = activeVote.voters.includes(this.socket.id);
+                restartBtn.textContent = voted ? `Reset (${activeVote.count}/${activeVote.needed})` : `Vote Reset (${activeVote.count}/${activeVote.needed})`;
+                restartBtn.classList.toggle('active', voted);
+                restartBtn.onclick = () => {
+                    if (!voted) this.socket.emit('cast_vote', { roomCode: this.roomCode });
+                };
+            } else {
+                restartBtn.textContent = 'Reset';
+                restartBtn.classList.remove('active');
+                restartBtn.onclick = () => {
+                    if (confirm("Start vote to reset game?")) {
+                        this.socket.emit('start_vote', { roomCode: this.roomCode, type: 'reset' });
+                    }
+                };
             }
         }
 
@@ -1542,68 +1606,151 @@ class SoundManager {
     constructor() {
         this.ctx = null;
         this.enabled = true;
-        this.masterVolume = 0.3;
+        this.masterVolume = 0.25;
+        this.reverbNode = null;
 
         // Unlock audio context on first interaction
         const unlock = () => {
             if (this.ctx) return;
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.setupReverb();
             if (this.ctx.state === 'suspended') this.ctx.resume();
             window.removeEventListener('click', unlock);
             window.removeEventListener('keydown', unlock);
-            console.log("[Audio] Context Unlocked & Synthesizer Ready");
+            console.log("✨ [Audio] High-Fidelity Synthesizer Initialized");
         };
         window.addEventListener('click', unlock);
         window.addEventListener('keydown', unlock);
+    }
+
+    async setupReverb() {
+        if (!this.ctx) return;
+        this.reverbNode = this.ctx.createConvolver();
+
+        // Procedural Reverb Impulse Response (approx. 1.5s of 'tranquil room')
+        const length = this.ctx.sampleRate * 1.5;
+        const impulse = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+        for (let i = 0; i < 2; i++) {
+            const channel = impulse.getChannelData(i);
+            for (let j = 0; j < length; j++) {
+                // Exponentially decaying white noise
+                channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 3);
+            }
+        }
+        this.reverbNode.buffer = impulse;
+
+        // Connect reverb to destination
+        const reverbGain = this.ctx.createGain();
+        reverbGain.gain.value = 0.3; // Wet level
+        this.reverbNode.connect(reverbGain);
+        reverbGain.connect(this.ctx.destination);
     }
 
     play(name) {
         if (!this.enabled || !this.ctx) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
+        const now = this.ctx.currentTime;
+
+        // Helper to get master destination (Dry + Reverb)
+        const connect = (node) => {
+            const master = this.ctx.createGain();
+            master.gain.value = this.masterVolume;
+            node.connect(master);
+            master.connect(this.ctx.destination);
+            if (this.reverbNode) node.connect(this.reverbNode);
+            return master;
+        };
+
         switch (name) {
-            case 'click': this.playSynth(880, 0.05, 'triangle', 0.1); break;
-            case 'hover': this.playSynth(1200, 0.02, 'sine', 0.05); break;
-            case 'select': this.playSynth(440, 0.08, 'sine', 0.2); break;
-            case 'roll': this.playNoise(0.4, 0.3, 200, 0.8); break;
-            case 'dice_hit': this.playPerc(150, 0.1, 0.3); break;
-            case 'bank': this.playSweep(440, 880, 0.3, 'sine'); break;
-            case 'farkle': this.playSweep(220, 110, 0.5, 'sawtooth', 0.2); break;
-            case 'success': this.playChord([523.25, 659.25, 783.99], 0.4); break;
-            case 'hot_dice': this.playArp([880, 1100, 1320, 1760], 0.1); break;
-            case 'menu_open': this.playSweep(200, 600, 0.2, 'sine'); break;
-            case 'msg': this.playChord([659.25, 783.99], 0.15, 0.5); break;
+            case 'click':
+                // Modern, soft organic tick
+                this.playTone({ freq: 880, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.4 });
+                break;
+            case 'hover':
+                // Ethereal swell
+                this.playTone({ freq: 1200, dur: 0.2, type: 'sine', attack: 0.1, decay: 0.1, vol: 0.1 });
+                break;
+            case 'select':
+                // Resonant wooden tap
+                this.playTone({ freq: 440, dur: 0.15, type: 'triangle', attack: 0.01, decay: 0.1, vol: 0.3 });
+                this.playNoise({ dur: 0.05, vol: 0.1, low: 2000, high: 5000 });
+                break;
+            case 'roll':
+                // Smooth physical tumble
+                this.playNoise({ dur: 0.6, vol: 0.2, low: 100, high: 800, sweep: true });
+                this.playTone({ freq: 60, dur: 0.6, type: 'sine', attack: 0.1, decay: 0.5, vol: 0.15 });
+                break;
+            case 'dice_hit':
+                // Soft impact
+                this.playNoise({ dur: 0.08, vol: 0.25, low: 1500, high: 4000 });
+                this.playTone({ freq: 180, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.1, vol: 0.3 });
+                break;
+            case 'bank':
+                // Tranquil upward glass shimmer
+                this.playSweep({ start: 440, end: 1760, dur: 0.8, attack: 0.1, decay: 0.7, vol: 0.4, type: 'sine' });
+                this.playChord({ freqs: [880, 1100, 1320], dur: 1.2, vol: 0.2, attack: 0.2 });
+                break;
+            case 'farkle':
+                // Gentle "sigh" - minor 7th drop
+                this.playSweep({ start: 330, end: 110, dur: 1.2, attack: 0.1, decay: 1.1, vol: 0.3, type: 'sine' });
+                this.playTone({ freq: 116.54, dur: 1.5, type: 'sine', attack: 0.2, decay: 1.3, vol: 0.15 });
+                break;
+            case 'success':
+                // C-Major Glassy Chord
+                this.playChord({ freqs: [523.25, 659.25, 783.99, 1046.50], dur: 1.5, vol: 0.4, attack: 0.1 });
+                break;
+            case 'hot_dice':
+                // Ascending "Magic" Arpeggio
+                this.playArp({ freqs: [440, 554, 659, 880, 1108, 1318, 1760], interval: 0.1, vol: 0.25 });
+                break;
+            case 'menu_open':
+                this.playTone({ freq: 200, dur: 0.3, type: 'sine', attack: 0.1, decay: 0.2, vol: 0.3 });
+                this.playSweep({ start: 200, end: 600, dur: 0.3, attack: 0.05, decay: 0.25, vol: 0.2 });
+                break;
+            case 'msg':
+                // Tranquil notification chime
+                this.playArp({ freqs: [783.99, 1046.50], interval: 0.08, vol: 0.3, dur: 0.4 });
+                break;
         }
     }
 
-    playSynth(freq, dur, type = 'sine', vol = 1) {
+    playTone({ freq, dur, type = 'sine', attack = 0.01, decay = 0.1, vol = 1 }) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
+
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        this.connectToMaster(gain);
+
         osc.start();
-        osc.stop(this.ctx.currentTime + dur);
+        osc.stop(this.ctx.currentTime + attack + decay + 0.1);
     }
 
-    playSweep(startFreq, endFreq, dur, type = 'sine', vol = 1) {
+    playSweep({ start, end, dur, attack = 0.05, decay = 0.2, vol = 1, type = 'sine' }) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = type;
-        osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + dur);
-        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        osc.frequency.setValueAtTime(start, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(end, this.ctx.currentTime + dur);
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
+
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        this.connectToMaster(gain);
+
         osc.start();
-        osc.stop(this.ctx.currentTime + dur);
+        osc.stop(this.ctx.currentTime + dur + 0.1);
     }
 
-    playNoise(dur, vol, filterFreq, decay = 0.1) {
+    playNoise({ dur, vol, low = 100, high = 1000, sweep = false }) {
         const bufferSize = this.ctx.sampleRate * dur;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -1611,34 +1758,48 @@ class SoundManager {
 
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
+
         const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(filterFreq, this.ctx.currentTime);
-        filter.frequency.exponentialRampToValueAtTime(filterFreq / 2, this.ctx.currentTime + dur);
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(high, this.ctx.currentTime);
+        if (sweep) {
+            filter.frequency.exponentialRampToValueAtTime(low, this.ctx.currentTime + dur);
+        }
 
         const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.ctx.destination);
+        this.connectToMaster(gain);
+
         noise.start();
+        noise.stop(this.ctx.currentTime + dur);
     }
 
-    playPerc(freq, dur, vol) {
-        this.playSynth(freq, dur, 'sine', vol);
-        this.playNoise(dur / 2, vol * 0.5, 1000);
-    }
-
-    playChord(freqs, dur, vol = 1) {
-        freqs.forEach(f => this.playSynth(f, dur, 'sine', vol / freqs.length));
-    }
-
-    playArp(freqs, interval, vol = 1) {
-        freqs.forEach((f, i) => {
-            setTimeout(() => this.playSynth(f, interval * 2, 'sine', vol), i * interval * 1000);
+    playChord({ freqs, dur, vol = 1, attack = 0.1 }) {
+        freqs.forEach(f => {
+            this.playTone({ freq: f, dur: dur, type: 'sine', attack: attack, decay: dur - attack, vol: vol / freqs.length });
         });
+    }
+
+    playArp({ freqs, interval, vol = 1, dur = 0.2 }) {
+        freqs.forEach((f, i) => {
+            setTimeout(() => {
+                if (!this.ctx) return;
+                this.playTone({ freq: f, dur: dur, type: 'sine', attack: 0.05, decay: dur, vol: vol });
+            }, i * interval * 1000);
+        });
+    }
+
+    connectToMaster(node) {
+        const master = this.ctx.createGain();
+        master.gain.value = this.masterVolume;
+        node.connect(master);
+        master.connect(this.ctx.destination);
+        if (this.reverbNode) node.connect(this.reverbNode);
     }
 
     toggle() {
