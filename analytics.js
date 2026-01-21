@@ -41,7 +41,7 @@ export const analytics = {
                 if (req.path !== '/' && req.path !== '/index.html') return;
             }
 
-            const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+            const ip = (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
             const uaString = req.headers['user-agent'];
             const uaParser = new UAParser(uaString);
 
@@ -71,7 +71,31 @@ export const analytics = {
                     };
                 }
             } catch (e) {
-                console.warn('[ANALYTICS] ip-api.com lookup failed:', e.message);
+                console.warn('[ANALYTICS] ip-api.com lookup failed, trying fallback:', e.message);
+                try {
+                    const fbResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+                    const fbData = await fbResponse.json();
+                    if (!fbData.error) {
+                        geo = {
+                            country: fbData.country_name,
+                            countryCode: fbData.country_code,
+                            region: fbData.region_code,
+                            regionName: fbData.region,
+                            city: fbData.city,
+                            zip: fbData.postal,
+                            lat: fbData.latitude,
+                            lon: fbData.longitude,
+                            ll: [fbData.latitude, fbData.longitude],
+                            timezone: fbData.timezone,
+                            isp: fbData.org,
+                            org: fbData.org,
+                            as: fbData.asn,
+                            proxy: false // ipapi.co free doesn't easily show proxy in basic json
+                        };
+                    }
+                } catch (fbErr) {
+                    console.warn('[ANALYTICS] Full geolocation failure:', fbErr.message);
+                }
             }
 
             // Device type detection

@@ -172,14 +172,15 @@ function renderStats(data) {
         }).addTo(map).bindPopup(`Visits: ${count}`);
     });
 
-    // Countries List
+    // Top Locations List
     const countryContainer = document.getElementById('country-list');
     countryContainer.innerHTML = '';
-    const sortedCountries = Object.entries(data.countries).sort((a, b) => b[1] - a[1]);
-    sortedCountries.forEach(([code, count]) => {
+    // Use the cities data which contains City, Region, Country
+    const sortedLocations = Object.entries(data.cities || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    sortedLocations.forEach(([loc, count]) => {
         const div = document.createElement('div');
         div.className = 'list-item';
-        div.innerHTML = `<span>${code || 'Unknown'}</span> <span>${count}</span>`;
+        div.innerHTML = `<span style="font-size: 0.8rem;">${loc || 'Unknown'}</span> <span>${count}</span>`;
         countryContainer.appendChild(div);
     });
 
@@ -189,13 +190,19 @@ function renderStats(data) {
     data.recent.forEach(hit => {
         const tr = document.createElement('tr');
         const date = new Date(hit.timestamp).toLocaleTimeString();
-        const loc = hit.geo ? `${hit.geo.city}, ${hit.geo.country}` : 'Unknown';
+
+        const city = hit.geo?.city || 'Unknown';
+        const region = hit.geo?.regionName || hit.geo?.region || '';
+        const country = hit.geo?.countryCode || hit.geo?.country || '';
+        const locString = `${city}${region ? ', ' + region : ''} (${country})`;
+        const isp = hit.geo?.isp || hit.geo?.org || '';
+
         tr.innerHTML = `
             <td>${date}</td>
             <td>${hit.ip}</td>
-            <td>${hit.path}</td>
-            <td>${loc}</td>
-            <td>${hit.ua.os.name} / ${hit.ua.browser.name}</td>
+            <td style="font-size: 0.75rem; color: var(--text-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${hit.path}</td>
+            <td title="${isp}">${locString}</td>
+            <td style="font-size: 0.8rem;">${hit.ua.os.name || '??'} / ${hit.ua.browser.name || '??'}</td>
         `;
         tableBody.appendChild(tr);
     });

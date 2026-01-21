@@ -120,13 +120,27 @@ export const db = {
     getLeaderboard: async () => {
         try {
             const res = await pool.query(`
-                SELECT u.username, u.display_name, u.avatar, s.wins, s.total_score, s.highest_round_score
+                SELECT 
+                    u.username, 
+                    u.display_name, 
+                    u.avatar, 
+                    s.wins, 
+                    s.games_played,
+                    s.total_score, 
+                    s.highest_round_score as highest_score
                 FROM user_stats s
                 JOIN users u ON s.user_id = u.id
+                WHERE s.games_played > 0
                 ORDER BY s.wins DESC, s.total_score DESC
-                LIMIT 20
+                LIMIT 50
             `);
-            return res.rows;
+            return res.rows.map(row => ({
+                name: row.display_name || row.username,
+                wins: row.wins,
+                gamesPlayed: row.games_played,
+                highestScore: row.highest_score,
+                totalScore: row.total_score
+            }));
         } catch (e) {
             console.error("getLeaderboard Error", e);
             return [];

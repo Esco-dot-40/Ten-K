@@ -12,20 +12,28 @@ import { calculateScore, isScoringSelection } from './rules.js';
 
 // Global reference
 const DISCORD_CLIENT_ID = "1455067365694771364"; // Replace with your Application ID
-console.log("Farkle Client Execution Started");
+
 
 class FarkleClient {
     constructor() {
-        console.log("FarkleClient constructor start");
+
 
         // Create on-screen debug panel
-        this.createDebugPanel();
-        this.addDebugMessage('🚀 FarkleClient initializing...');
+        try {
+            this.createDebugPanel();
+            this.addDebugMessage('✨ Farkle Engine Starting...');
+        } catch (e) {
+            console.error('Debug panel initialization failed:', e);
+        }
 
         // Default to random player name until Discord loads
-        const loadingContainer = document.getElementById('connection-debug');
-        if (loadingContainer) {
-            loadingContainer.textContent = "Script Running...";
+        try {
+            const loadingContainer = document.getElementById('connection-debug');
+            if (loadingContainer) {
+                loadingContainer.textContent = "Script Running...";
+            }
+        } catch (e) {
+            console.error('Loading container update failed:', e);
         }
         window.onerror = (msg, url, line) => {
             this.debugLog(`JS Error: ${msg} at ${line}`);
@@ -95,7 +103,14 @@ class FarkleClient {
                 roomDisplay: document.getElementById('room-display'),
                 spectatorDisplay: document.getElementById('spectator-display'),
                 gameInfoBar: document.getElementById('game-info-bar'),
-                leaveText: document.getElementById('leave-text')
+                leaveText: document.getElementById('leave-text'),
+                chatNotifications: document.getElementById('chat-notifications'),
+                volumeSlider: document.getElementById('volume-slider'),
+                muteBtn: document.getElementById('mute-btn'),
+                volumeIcon: document.getElementById('volume-icon'),
+                statsBtn: document.getElementById('stats-btn'),
+                statsModal: document.getElementById('stats-modal'),
+                statsContent: document.getElementById('stats-content')
             };
 
             // Hook up start button
@@ -105,7 +120,8 @@ class FarkleClient {
                 });
             }
 
-            this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer);
+            this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer, this);
+            this.sounds = new SoundManager();
 
             // Speed Mode Hookup
             const speedBtn = document.getElementById('mode-speed-btn');
@@ -135,13 +151,13 @@ class FarkleClient {
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
+            try { this.createBackgroundEffects(); } catch (e) { console.error("Background Effects Failed", e); }
             try { this.initHistory(); } catch (e) { console.error("History Init Failed", e); }
 
             // Create debug panel
             this.createDebugPanel();
-            this.addDebugMessage('🚀 Modules initialized');
+            this.addDebugMessage('✅ Core Modules Ready');
 
-            console.log("Modules initialized");
             // Fall through to Discord Init immediately
 
 
@@ -185,10 +201,9 @@ class FarkleClient {
                 // Use local path as CDN might be blocked by Discord CSP
                 const module = await import("/libs/@discord/embedded-app-sdk/output/index.mjs");
                 DiscordSDK = module.DiscordSDK;
-                this.addDebugMessage('✅ Discord SDK Loaded');
+                this.addDebugMessage('✅ Discord SDK Connected');
             } catch (importErr) {
-                this.debugLog(`SDK Import Failed: ${importErr.message}`);
-                this.addDebugMessage(`❌ SDK Import Failed: ${importErr.message}`);
+                this.addDebugMessage(`❌ Connection failed: ${importErr.message}`);
                 // Try fallback to unpkg if local fails, but local is preferred
                 try {
                     const fallback = await import("https://unpkg.com/@discord/embedded-app-sdk/output/index.mjs");
@@ -207,19 +222,12 @@ class FarkleClient {
             const savedToken = localStorage.getItem('farkle_auth_token');
             const savedUser = localStorage.getItem('farkle_user_data');
 
-            this.addDebugMessage(`📦 localStorage: token=${!!savedToken}, user=${!!savedUser}`);
-            console.log('[DISCORD-AUTH] localStorage check:', { hasToken: !!savedToken, hasUser: !!savedUser });
 
             if (savedToken && savedUser) {
-                this.addDebugMessage('✅ Found saved session, restoring...');
-                console.log('[DISCORD-AUTH] Found saved session, attempting restore');
                 try {
                     const user = JSON.parse(savedUser);
                     this.playerName = user.global_name || user.username;
                     this.discordId = user.id;
-                    this.debugLog(`Restored session for ${this.playerName}`);
-                    this.addDebugMessage(`✅ Restored: ${this.playerName}`);
-                    console.log('[DISCORD-AUTH] ✅ Restored from localStorage, calling showWelcome');
 
                     // Show Welcome
                     this.showWelcome(this.playerName, user.avatar, user.id);
@@ -228,18 +236,14 @@ class FarkleClient {
                     this.identifyAnalytics(user);
                     return;
                 } catch (e) {
-                    this.addDebugMessage(`❌ Session restore failed: ${e.message}`);
-                    console.warn("[DISCORD-AUTH] ❌ Invalid saved session", e);
                     localStorage.removeItem('farkle_auth_token');
                     localStorage.removeItem('farkle_user_data');
                 }
             } else {
-                this.addDebugMessage('⚠️ No saved session, doing full OAuth');
-                console.log('[DISCORD-AUTH] ⚠️ No saved session, proceeding with full OAuth');
             }
 
             // 2. Proceed with Discord SDK Auth if no session
-            this.addDebugMessage('🚀 Readying Discord SDK...');
+
 
             // Add a timeout to SDK ready
             const readyTimeout = new Promise((_, reject) =>
@@ -248,14 +252,12 @@ class FarkleClient {
 
             try {
                 await Promise.race([this.discordSdk.ready(), readyTimeout]);
-                this.addDebugMessage('✅ SDK Ready!');
             } catch (readyErr) {
-                this.addDebugMessage(`❌ SDK Ready failed: ${readyErr.message}`);
+                this.addDebugMessage(`❌ SDK Ready failed`);
                 throw readyErr;
             }
 
-            this.addDebugMessage(`🔗 URL: ${window.location.href.split('?')[0]}`);
-            this.addDebugMessage('🔑 Authorizing...');
+
             // Authorize with Discord Client
             // Removing prompt: none and redirect_uri to let Discord use its defaults
             // and avoid RPC bridge rejection issues.
@@ -269,9 +271,7 @@ class FarkleClient {
                     "guilds.members.read"
                 ],
             });
-            this.addDebugMessage('✅ Authorization code received');
 
-            this.addDebugMessage('📡 Exchanging code for token...');
             // Exchange code for token via backend
             const response = await fetch("/api/token", {
                 method: "POST",
@@ -291,7 +291,6 @@ class FarkleClient {
             const { access_token, user } = await response.json();
             this.addDebugMessage(`✅ Token received for ${user.username}`);
 
-            this.addDebugMessage('🔗 Authenticating SDK...');
             // Authenticate with Discord SDK (for channel interactions if needed later)
             const auth = await this.discordSdk.commands.authenticate({
                 access_token,
@@ -300,22 +299,17 @@ class FarkleClient {
             if (auth == null) {
                 throw new Error("Authenticate command failed via SDK");
             }
-            this.addDebugMessage('✅ SDK Authenticated');
+            this.addDebugMessage(`✅ Identity Verified: ${user.username}`);
 
-            // Success! Store session.
             try {
                 localStorage.setItem('farkle_auth_token', access_token);
                 localStorage.setItem('farkle_user_data', JSON.stringify(user));
-                this.addDebugMessage('💾 Session saved to localStorage');
             } catch (lsErr) {
-                this.addDebugMessage(`⚠️ localStorage save failed: ${lsErr.message}`);
+                console.warn("Storage failed", lsErr);
             }
 
             this.playerName = user.global_name || user.username;
             this.discordId = user.id;
-
-            this.debugLog(`Authenticated as ${this.playerName}`);
-            this.addDebugMessage(`🎉 Welcome, ${this.playerName}!`);
 
             console.log('[WELCOME] Calling showWelcome with:', this.playerName, user.avatar, user.id);
             this.showWelcome(this.playerName, user.avatar, user.id);
@@ -323,8 +317,6 @@ class FarkleClient {
 
         } catch (err) {
             console.error("Discord Auth Failed/Cancelled", err);
-            this.addDebugMessage(`❌ Auth Error: ${err.message}`);
-            this.debugLog(`Discord Auth Failed: ${err.message} - Using Default Name`);
             // Fallback to random guest if auth fails
             if (!this.playerName) {
                 // Fallback is already set in constructor
@@ -437,6 +429,8 @@ class FarkleClient {
             name: finalName,
             dbId: this.discordId || null
         });
+
+        this.sounds.play('click');
     }
 
     async updateDiscordPresence(details, state) {
@@ -448,7 +442,7 @@ class FarkleClient {
                     state: state,
                     assets: {
                         large_image: "farkle_icon",
-                        large_text: "Farkle"
+                        large_text: "Ten-K"
                     }
                 }
             });
@@ -456,63 +450,150 @@ class FarkleClient {
         }
     }
 
+    toggleMute() {
+        const newState = !this.sounds.enabled;
+        this.sounds.setEnabled(newState);
+
+        const isMuted = !newState;
+        const muteBtns = [this.ui.muteBtn, document.getElementById('quick-mute-btn')];
+        muteBtns.forEach(btn => {
+            if (btn) btn.classList.toggle('muted', isMuted);
+        });
+
+        this.updateVolumeIcon(isMuted ? 0 : this.sounds.masterVolume);
+        if (!isMuted) this.sounds.play('click');
+        localStorage.setItem('farkle_muted', isMuted);
+    }
+
     initSettings() {
-        // Theme Buttons
         if (this.ui.settingsBtn) {
             this.ui.settingsBtn.addEventListener('click', () => {
                 this.ui.settingsModal.classList.remove('hidden');
+                this.sounds.play('menu_open');
             });
         }
         if (this.ui.settingsModal) {
             this.ui.settingsModal.querySelector('.close-modal').addEventListener('click', () => {
                 this.ui.settingsModal.classList.add('hidden');
+                this.sounds.play('click');
             });
         }
 
-        // Stats Buttons (New)
-        this.initStatsUI();
+        // Settings UI initialization complete
 
-        // Color Themes
-        const themeBtns = document.querySelectorAll('.theme-btn');
-        themeBtns.forEach(btn => {
+        // Felt Color (Table)
+        const feltBtnGroup = document.querySelectorAll('.theme-options .theme-btn[data-theme]');
+        feltBtnGroup.forEach(btn => {
             btn.addEventListener('click', () => {
                 const theme = btn.dataset.theme;
-                let color = '#0f3d24'; // default green
-                if (theme === 'blue') color = '#1e3a8a';
-                if (theme === 'red') color = '#7f1d1d';
-                if (theme === 'purple') color = '#581c87';
-
-                document.body.style.setProperty('--bg-panel', this.styleHexToRgba(color, 0.75));
-                document.body.style.setProperty('--bg-panel-solid', color);
+                let color = '#1a3a2a';
+                if (theme === 'blue') color = '#1a2a4a';
+                if (theme === 'red') color = '#4a1a1a';
+                if (theme === 'purple') color = '#2a1a4a';
+                document.body.style.background = color;
+                feltBtnGroup.forEach(b => b.classList.toggle('active', b === btn));
+                this.sounds.play('select');
             });
         });
 
-        // Dice Themes
-        const diceSelect = document.getElementById('dice-theme-select');
+        // Background Atmosphere
+        const bgBtnGroup = document.querySelectorAll('.theme-options .theme-btn[data-bg]');
+        const auroraContainer = document.querySelector('.aurora-container');
+        bgBtnGroup.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const bgType = btn.dataset.bg;
+                if (auroraContainer) {
+                    if (bgType === 'aurora-cyan') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(77, 234, 255, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(180, 77, 234, 0.3)');
+                    } else if (bgType === 'aurora-purple') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(180, 77, 234, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(77, 77, 255, 0.3)');
+                    } else if (bgType === 'cosmic-red') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(224, 90, 71, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(234, 77, 180, 0.3)');
+                    }
+                }
+                bgBtnGroup.forEach(b => b.classList.toggle('active', b === btn));
+                localStorage.setItem('farkle-bg-theme', bgType);
+                this.sounds.play('select');
+            });
+        });
+
+        // Dice Theme
+        const diceSelect = this.ui.diceThemeSelect;
         if (diceSelect) {
             const savedTheme = localStorage.getItem('farkle-dice-theme') || 'classic';
             diceSelect.value = savedTheme;
             document.body.setAttribute('data-dice-theme', savedTheme);
-            if (this.dice3D) this.dice3D.materialCache.clear();
 
             diceSelect.addEventListener('change', (e) => {
                 const val = e.target.value;
                 document.body.setAttribute('data-dice-theme', val);
                 localStorage.setItem('farkle-dice-theme', val);
-                if (this.dice3D) {
-                    this.dice3D.materialCache.clear();
-                    this.dice3D.updateDiceMaterials();
-                }
+                if (this.dice3D) this.dice3D.materialCache.clear();
+                this.sounds.play('click');
             });
+        }
+
+        if (this.ui.volumeSlider) {
+            this.ui.volumeSlider.addEventListener('input', (e) => {
+                const vol = parseFloat(e.target.value);
+                this.sounds.setVolume(vol);
+                localStorage.setItem('farkle_volume', vol);
+                this.updateVolumeIcon(vol);
+                // If it was muted by volume 0, and we slide up, but master toggle is OFF, 
+                // we should probably NOT unmute the master toggle unless the user explicitly clicks mute.
+                // But if they slide volume up from 0, it's expected to hear something IF enabled.
+            });
+        }
+
+        if (this.ui.muteBtn) {
+            this.ui.muteBtn.addEventListener('click', () => this.toggleMute());
+        }
+
+        const quickMute = document.getElementById('quick-mute-btn');
+        if (quickMute) {
+            quickMute.addEventListener('click', () => this.toggleMute());
+        }
+
+        // Restore Settings
+        const savedVol = localStorage.getItem('farkle_volume');
+        if (savedVol !== null && this.ui.volumeSlider) {
+            const vol = parseFloat(savedVol);
+            this.ui.volumeSlider.value = vol;
+            this.sounds.masterVolume = vol;
+            this.updateVolumeIcon(vol);
+        }
+
+        const savedBg = localStorage.getItem('farkle-bg-theme');
+        if (savedBg) {
+            const targetBtn = Array.from(bgBtnGroup).find(b => b.dataset.bg === savedBg);
+            if (targetBtn) targetBtn.click();
+        }
+
+        const savedMuted = localStorage.getItem('farkle_muted') === 'true';
+        if (savedMuted) {
+            this.sounds.enabled = true; // Temporary set to true so toggleMute flips it to false
+            this.toggleMute();
         }
     }
 
+    updateVolumeIcon(vol) {
+        const isMuted = vol <= 0 || !this.sounds.enabled;
+        const iconHtml = isMuted ?
+            `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l5 5m0-5l-5 5"></path><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>` :
+            `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+
+        if (this.ui.volumeIcon) this.ui.volumeIcon.innerHTML = iconHtml;
+        const quickMuteIcon = document.querySelector('#quick-mute-btn svg');
+        if (quickMuteIcon) quickMuteIcon.parentElement.innerHTML = iconHtml;
+    }
+
     initStatsUI() {
-        // Find or create buttons in main menu
         const modeSelection = document.getElementById('mode-selection');
         if (!modeSelection) return;
 
-        // Container for stats buttons
         let statsRow = document.getElementById('stats-row');
         if (!statsRow) {
             statsRow = document.createElement('div');
@@ -523,7 +604,7 @@ class FarkleClient {
             statsRow.style.marginTop = '2rem';
             modeSelection.appendChild(statsRow);
         }
-        statsRow.innerHTML = ''; // Clear to prevent dupes
+        statsRow.innerHTML = '';
 
         const lbBtn = document.createElement('button');
         lbBtn.className = 'btn secondary small';
@@ -540,7 +621,6 @@ class FarkleClient {
     }
 
     async showLeaderboard() {
-        // Reuse or create modal
         const modal = this.getStatsModal();
         const content = modal.querySelector('.modal-content-body');
         content.innerHTML = '<p>Loading...</p>';
@@ -576,9 +656,7 @@ class FarkleClient {
         modal.classList.remove('hidden');
 
         if (!this.discordId) {
-            // Fallback: try to see if we are in "mock" mode or just not authed
             if (this.discordSdk && this.discordSdk.mock) {
-                // Mock ID
                 this.discordId = "mock_user_123";
             } else {
                 content.innerHTML = "<p>Please play via Discord Activity to view stats.</p>";
@@ -622,8 +700,7 @@ class FarkleClient {
                 </div>
             `;
         } catch (e) {
-            console.error(e);
-            content.innerHTML = `<p>No stats found yet. Play a game to track stats!</p><p style="font-size:0.75rem; color:#666; margin-top:10px;">Debug ID: ${this.discordId || "Not Authenticated"}</p>`;
+            content.innerHTML = `<p>No stats found yet. Play a game to track stats!</p>`;
         }
     }
 
@@ -633,7 +710,6 @@ class FarkleClient {
             modal = document.createElement('div');
             modal.id = 'stats-modal';
             modal.className = 'modal hidden';
-            // Force high z-index and pointer interaction
             modal.style.zIndex = "99999";
             modal.style.pointerEvents = "auto";
 
@@ -641,20 +717,15 @@ class FarkleClient {
                 <div class="modal-content" style="pointer-events: auto;">
                     <h2>Statistics</h2>
                     <div class="modal-content-body" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;"></div>
-                    <button class="btn close-modal" id="stats-close-btn">Close</button>
+                    <button class="btn close-modal">Close</button>
                 </div>
             `;
             document.body.appendChild(modal);
-        }
-
-        // Re-attach listener every time to be safe, removing old one if needed (cloning node is a cheap way to strip listeners, but simpler just to overwrite onclick)
-        const closeBtn = modal.querySelector('.close-modal');
-        if (closeBtn) {
-            closeBtn.onclick = () => {
+            modal.querySelector('.close-modal').onclick = () => {
                 modal.classList.add('hidden');
+                this.sounds.play('click');
             };
         }
-
         return modal;
     }
 
@@ -716,6 +787,7 @@ class FarkleClient {
                     .map(el => el.dataset.id)
                     .filter(id => id);
                 this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: selectedIds, useHighStakes: false });
+                this.sounds.play('click');
             }
         });
 
@@ -725,6 +797,7 @@ class FarkleClient {
                     .map(el => el.dataset.id)
                     .filter(id => id);
                 this.socket.emit('bank', { roomCode: this.roomCode, confirmedSelections: selectedIds });
+                this.sounds.play('bank');
             }
         });
 
@@ -734,6 +807,7 @@ class FarkleClient {
                 const id = dieEl.dataset.id;
                 dieEl.classList.toggle('selected');
                 this.socket.emit('toggle_die', { roomCode: this.roomCode, dieId: id });
+                this.sounds.play('select');
                 // Trigger UI update immediately for responsiveness
                 this.renderControls();
             }
@@ -741,6 +815,15 @@ class FarkleClient {
 
         this.ui.rulesBtn.addEventListener('click', () => this.ui.rulesModal.classList.remove('hidden'));
         this.ui.rulesModal.querySelector('.close-modal').addEventListener('click', () => this.ui.rulesModal.classList.add('hidden'));
+
+        if (this.ui.statsBtn) {
+            this.ui.statsBtn.addEventListener('click', () => this.showStats());
+        }
+        if (this.ui.statsModal) {
+            this.ui.statsModal.querySelector('.close-modal').addEventListener('click', () => {
+                this.ui.statsModal.classList.add('hidden');
+            });
+        }
 
         this.ui.restartBtn.addEventListener('click', () => {
             this.socket.emit('restart', { roomCode: this.roomCode });
@@ -776,6 +859,11 @@ class FarkleClient {
                 if (e.key === 'Enter') this.sendChat();
             });
         }
+
+        // Add hover sounds to all buttons
+        document.querySelectorAll('.btn, .icon-btn, .die, .room-card, .theme-btn').forEach(el => {
+            el.addEventListener('mouseenter', () => this.sounds.play('hover'));
+        });
 
         // --- Hotkeys ---
         document.addEventListener('keydown', (e) => {
@@ -817,7 +905,7 @@ class FarkleClient {
 
     initSocketEvents() {
         this.socket.on('connect', () => {
-            this.debugLog(`Connected!`);
+            this.addDebugMessage('📡 Uplink Established');
             this.showFeedback("Connected!", "success");
 
             const modeSelection = document.getElementById('mode-selection');
@@ -863,6 +951,7 @@ class FarkleClient {
 
             // Update UI
             if (this.ui.roomDisplay) this.ui.roomDisplay.textContent = `Table: ${this.roomCode}`;
+            this.addDebugMessage(`🎮 Session Active: ${this.roomCode}`);
             if (this.ui.gameInfoBar) this.ui.gameInfoBar.style.display = 'flex';
             if (this.ui.leaveText) this.ui.leaveText.style.display = 'inline';
             if (this.ui.leaveBtn) this.ui.leaveBtn.style.width = 'auto';
@@ -895,6 +984,7 @@ class FarkleClient {
 
                 if (data.farkle) {
                     this.showFeedback("FARKLE!", "error");
+                    this.sounds.play('farkle');
                     // Buffer delay: maintain isRolling=true to catch incoming state updates in pendingState
                     const delay = this.isSpeedMode ? 800 : 2000;
                     await new Promise(r => setTimeout(r, delay));
@@ -908,6 +998,7 @@ class FarkleClient {
                 this.updateGameState(finalState);
                 if (data.hotDice) {
                     this.showFeedback("HOT DICE!", "hot-dice");
+                    this.sounds.play('hot_dice');
                 }
             });
         });
@@ -1083,6 +1174,24 @@ class FarkleClient {
         // (UI update loop will hide it if game is null)
     }
 
+    updateGameState(state) {
+        if (!state) return;
+        this.gameState = state;
+        this.rules = state.rules;
+
+        this.renderPlayers();
+        this.renderDice(state.currentDice || []);
+        this.renderControls();
+        this.checkGameOver(state);
+
+        // Presence Update
+        const currentPlayer = state.players[state.currentPlayerIndex];
+        if (currentPlayer) {
+            const status = this.canInteract() ? "YOUR TURN" : (state.gameStatus === 'playing' ? `Waiting for ${currentPlayer.name}` : "Waiting to Start");
+            this.updateDiscordPresence(`Table: ${this.roomCode}`, status);
+        }
+    }
+
     canInteract() {
         if (this.isSpectator) return false;
         if (!this.gameState || this.gameState.gameStatus !== 'playing') return false;
@@ -1097,46 +1206,35 @@ class FarkleClient {
         if (!container) return;
 
         const players = this.gameState.players;
+        // Efficient rendering: sync child count
+        while (container.children.length < players.length) {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            const nameEl = document.createElement('div');
+            nameEl.className = 'player-info';
+            const scoreEl = document.createElement('div');
+            scoreEl.className = 'total-score';
+            card.appendChild(nameEl);
+            card.appendChild(scoreEl);
+            container.appendChild(card);
+        }
         while (container.children.length > players.length) {
             container.removeChild(container.lastChild);
         }
 
         players.forEach((player, index) => {
-            let card = container.children[index];
+            const card = container.children[index];
             const isCurrent = this.gameState.currentPlayerIndex === index && this.gameState.gameStatus === 'playing';
 
-            if (!card) {
-                card = document.createElement('div');
-                card.className = 'player-card';
-                card.style.minWidth = "150px";
-                if (index === this.gameState.currentPlayerIndex) card.classList.add('active'); // Preload active
-
-                const info = document.createElement('div');
-                info.className = 'player-info';
-
-                const name = document.createElement('span');
-                name.className = 'player-name';
-                info.appendChild(name);
-
-                const scoreDiv = document.createElement('div');
-                scoreDiv.className = 'total-score';
-
-                card.appendChild(info);
-                card.appendChild(scoreDiv);
-                container.appendChild(card);
-            }
-
-            const nameEl = card.querySelector('.player-name');
+            const nameEl = card.querySelector('.player-info');
             const scoreEl = card.querySelector('.total-score');
-            if (nameEl && nameEl.textContent !== player.name) nameEl.textContent = player.name;
-            if (scoreEl && scoreEl.textContent != player.score) scoreEl.textContent = player.score;
 
-            const isActive = card.classList.contains('active');
-            if (isCurrent && !isActive) card.classList.add('active');
-            if (!isCurrent && isActive) card.classList.remove('active');
+            if (nameEl.textContent !== player.name) nameEl.textContent = player.name;
+            const formattedScore = (player.score || 0).toLocaleString();
+            if (scoreEl.textContent !== formattedScore) scoreEl.textContent = formattedScore;
 
-            const targetOpacity = player.connected ? "1" : "0.5";
-            if (card.style.opacity !== targetOpacity) card.style.opacity = targetOpacity;
+            card.classList.toggle('active', isCurrent);
+            card.style.opacity = player.connected ? "1" : "0.5";
         });
     }
 
@@ -1226,7 +1324,18 @@ class FarkleClient {
                 startBtn.className = 'btn primary pulse';
                 startBtn.textContent = 'Start Game';
                 startBtn.onclick = () => this.socket.emit('start_game', { roomCode: this.roomCode });
-                if (this.ui.rollBtn.parentElement) this.ui.rollBtn.parentElement.appendChild(startBtn);
+
+                // Try multiple possible parent elements with fallbacks
+                const container = this.ui.rollBtn?.parentElement
+                    || document.querySelector('.button-group')
+                    || document.querySelector('.controls')
+                    || document.querySelector('.game-board');
+
+                if (container) {
+                    container.appendChild(startBtn);
+                } else {
+                    console.error('Could not find container for Start Game button');
+                }
             }
             if (this.gameState.players.length >= 2) {
                 startBtn.style.display = 'block';
@@ -1241,7 +1350,7 @@ class FarkleClient {
             return;
         }
 
-        // --- Debug Panel ---
+        // --- Game Actions Panel (formerly Debug) ---
         let debugPanel = document.getElementById('debug-panel');
         if (!debugPanel && this.ui.bankBtn.parentElement && this.ui.bankBtn.parentElement.parentElement) {
             debugPanel = document.createElement('div');
@@ -1249,25 +1358,65 @@ class FarkleClient {
             debugPanel.className = 'tools-panel';
 
             const forceBtn = document.createElement('button');
+            forceBtn.id = 'force-next-action-btn';
             forceBtn.className = 'btn micro';
             forceBtn.textContent = 'Force Next';
-            forceBtn.onclick = () => this.socket.emit('force_next_turn', { roomCode: this.roomCode });
 
             const restartBtn = document.createElement('button');
+            restartBtn.id = 'force-reset-action-btn';
             restartBtn.className = 'btn micro';
             restartBtn.textContent = 'Reset';
-            restartBtn.onclick = () => {
-                if (confirm("Restart game?")) this.socket.emit('debug_restart_preserve', { roomCode: this.roomCode });
-            };
 
             debugPanel.appendChild(forceBtn);
             debugPanel.appendChild(restartBtn);
             this.ui.bankBtn.parentElement.parentElement.appendChild(debugPanel);
-            // Host Checks
-            if (this.gameState.hostId === this.socket.id) {
-                debugPanel.style.display = 'block';
+        }
+
+        if (debugPanel) {
+            debugPanel.style.display = 'block'; // Always show now
+            const forceBtn = document.getElementById('force-next-action-btn');
+            const restartBtn = document.getElementById('force-reset-action-btn');
+
+            // Add null checks before manipulating buttons
+            if (!forceBtn || !restartBtn) {
+                console.warn('Voting buttons not found in DOM');
+                return;
+            }
+
+            const activeVote = this.gameState.activeVote;
+
+            // Handle Force Next Button
+            if (activeVote && activeVote.type === 'next') {
+                const voted = activeVote.voters.includes(this.socket.id);
+                forceBtn.textContent = voted ? `Next (${activeVote.count}/${activeVote.needed})` : `Vote Next (${activeVote.count}/${activeVote.needed})`;
+                forceBtn.classList.toggle('active', voted);
+                forceBtn.onclick = () => {
+                    if (!voted) this.socket.emit('cast_vote', { roomCode: this.roomCode });
+                };
             } else {
-                debugPanel.style.display = 'none';
+                forceBtn.textContent = 'Force Next';
+                forceBtn.classList.remove('active');
+                forceBtn.onclick = () => {
+                    this.socket.emit('start_vote', { roomCode: this.roomCode, type: 'next' });
+                };
+            }
+
+            // Handle Reset Button
+            if (activeVote && activeVote.type === 'reset') {
+                const voted = activeVote.voters.includes(this.socket.id);
+                restartBtn.textContent = voted ? `Reset (${activeVote.count}/${activeVote.needed})` : `Vote Reset (${activeVote.count}/${activeVote.needed})`;
+                restartBtn.classList.toggle('active', voted);
+                restartBtn.onclick = () => {
+                    if (!voted) this.socket.emit('cast_vote', { roomCode: this.roomCode });
+                };
+            } else {
+                restartBtn.textContent = 'Reset';
+                restartBtn.classList.remove('active');
+                restartBtn.onclick = () => {
+                    if (confirm("Start vote to reset game?")) {
+                        this.socket.emit('start_vote', { roomCode: this.roomCode, type: 'reset' });
+                    }
+                };
             }
         }
 
@@ -1442,69 +1591,411 @@ class FarkleClient {
         }
         this.ui.chatMessages.appendChild(msgDiv);
         this.ui.chatMessages.scrollTop = this.ui.chatMessages.scrollHeight;
+
+        // iOS Style Notification
+        if (!data.isSystem && data.sender !== this.playerName) {
+            const isPanelHidden = !this.ui.chatPanel || this.ui.chatPanel.classList.contains('hidden');
+            if (isPanelHidden) {
+                this.showChatNotification(data);
+            }
+        }
+    }
+
+    showChatNotification(data) {
+        if (!this.ui.chatNotifications) return;
+
+        const notif = document.createElement('div');
+        notif.className = 'chat-notification';
+
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        notif.innerHTML = `
+            <div class="notification-header">
+                <span class="notification-author">${data.sender}</span>
+                <span class="notification-time">${now}</span>
+            </div>
+            <div class="notification-body">${data.message}</div>
+        `;
+
+        notif.onclick = () => {
+            if (this.ui.chatPanel) {
+                this.ui.chatPanel.classList.remove('hidden');
+                this.ui.chatInput.focus();
+            }
+            notif.classList.add('outgoing');
+            setTimeout(() => notif.remove(), 400);
+        };
+
+        this.ui.chatNotifications.appendChild(notif);
+        this.sounds.play('msg');
+
+        // Auto remove
+        setTimeout(() => {
+            if (notif.parentElement) {
+                notif.classList.add('outgoing');
+                setTimeout(() => notif.remove(), 400);
+            }
+        }, 5000);
+    }
+
+    async showStats() {
+        if (!this.ui.statsModal || !this.ui.statsContent) return;
+
+        this.ui.statsModal.classList.remove('hidden');
+        this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading statistics...</p>';
+
+        try {
+            const response = await fetch('/api/stats/leaderboard');
+            if (!response.ok) throw new Error('Failed to fetch stats');
+
+            const stats = await response.json();
+
+            if (!stats || stats.length === 0) {
+                this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No stats available yet. Play some games!</p>';
+                return;
+            }
+
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
+            html += '<th style="padding: 0.75rem; text-align: left; color: var(--primary);">Player</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Wins</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Games</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Win %</th>';
+            html += '<th style="padding: 0.75rem; text-align: right; color: var(--primary);">High Score</th>';
+            html += '</tr></thead><tbody>';
+
+            stats.forEach((player, idx) => {
+                const winRate = player.gamesPlayed > 0 ? Math.round((player.wins / player.gamesPlayed) * 100) : 0;
+                html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
+                html += `<td style="padding: 0.75rem; font-weight: 600;">${idx + 1}. ${player.name || 'Anonymous'}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center; color: var(--success);">${player.wins}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center;">${player.gamesPlayed}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center;">${winRate}%</td>`;
+                html += `<td style="padding: 0.75rem; text-align: right; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</td>`;
+                html += `</tr>`;
+            });
+
+            html += '</tbody></table>';
+            this.ui.statsContent.innerHTML = html;
+        } catch (e) {
+            console.error('Failed to load stats:', e);
+            this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--danger);">Failed to load statistics. Try again later.</p>';
+        }
+    }
+
+    createBackgroundEffects() {
+        const container = document.getElementById('bg-dice-container');
+        if (!container) return;
+
+        // Create Stars
+        for (let i = 0; i < 50; i++) {
+            const star = document.createElement('div');
+            star.className = 'bg-particle';
+            const size = Math.random() * 3 + 1;
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            star.style.left = `${Math.random() * 100}%`;
+            star.style.top = `${Math.random() * 100}%`;
+            star.style.animationDelay = `${Math.random() * 5}s`;
+            star.style.animationDuration = `${Math.random() * 3 + 2}s`;
+            container.appendChild(star);
+        }
+
+        // Create Floating Dice Outlines
+        const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        for (let i = 0; i < 15; i++) {
+            const die = document.createElement('div');
+            die.className = 'bg-die';
+            die.textContent = diceChars[Math.floor(Math.random() * diceChars.length)];
+            die.style.left = `${Math.random() * 100}%`;
+            die.style.fontSize = `${Math.random() * 20 + 20}px`;
+            die.style.animationDuration = `${Math.random() * 10 + 10}s`;
+            die.style.animationDelay = `${Math.random() * 10}s`;
+            die.style.opacity = (Math.random() * 0.1 + 0.05).toString();
+            container.appendChild(die);
+        }
     }
 
     createDebugPanel() {
-        // Remove existing if any
-        const existing = document.getElementById('debug-panel');
-        if (existing) existing.remove();
+        try {
+            // Remove existing if any
+            const existing = document.getElementById('debug-panel');
+            if (existing) existing.remove();
 
-        const panel = document.createElement('div');
-        panel.id = 'debug-panel';
-        panel.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(10, 10, 15, 0.7);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            color: #00f2ff;
-            font-family: 'Outfit', 'Inter', sans-serif;
-            font-size: 10px;
-            letter-spacing: 0.5px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            max-width: 240px;
-            max-height: 120px;
-            overflow: hidden;
-            z-index: 10000;
-            border: 1px solid rgba(0, 242, 255, 0.2);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
-            pointer-events: none;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-        `;
-        document.body.appendChild(panel);
-        this.debugPanel = panel;
+            if (!document.body) {
+                console.warn('Document body not ready for debug panel');
+                return;
+            }
+
+            const panel = document.createElement('div');
+            panel.id = 'debug-panel';
+            panel.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: rgba(10, 10, 15, 0.7);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                color: #00f2ff;
+                font-family: 'Outfit', 'Inter', sans-serif;
+                font-size: 10px;
+                letter-spacing: 0.5px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                max-width: 240px;
+                max-height: 120px;
+                overflow: hidden;
+                z-index: 10000;
+                border: 1px solid rgba(0, 242, 255, 0.2);
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
+                pointer-events: none;
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+            `;
+            document.body.appendChild(panel);
+            this.debugPanel = panel;
+        } catch (e) {
+            console.error('Failed to create debug panel:', e);
+            this.debugPanel = null;
+        }
     }
 
     addDebugMessage(msg) {
-        if (!this.debugPanel) return;
-        const line = document.createElement('div');
-        line.style.cssText = `
-            margin-bottom: 2px;
-            opacity: 0.9;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            animation: fadeIn 0.3s ease-out;
-        `;
-        line.textContent = `> ${msg}`;
+        try {
+            if (!this.debugPanel) {
+                console.log(`[SYSTEM] ${msg}`);
+                return;
+            }
+            const line = document.createElement('div');
+            line.style.cssText = `
+                margin-bottom: 2px;
+                opacity: 0.9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                animation: fadeIn 0.3s ease-out;
+            `;
+            line.textContent = `> ${msg}`;
 
-        // Keep only last 4 messages for minimalism
-        while (this.debugPanel.children.length >= 4) {
-            this.debugPanel.removeChild(this.debugPanel.firstChild);
+            // Keep only last 4 messages for minimalism
+            while (this.debugPanel.children.length >= 4) {
+                this.debugPanel.removeChild(this.debugPanel.firstChild);
+            }
+
+            this.debugPanel.appendChild(line);
+            console.log(`[SYSTEM] ${msg}`);
+        } catch (e) {
+            console.error('Failed to add debug message:', e);
+        }
+    }
+}
+
+class SoundManager {
+    constructor() {
+        this.ctx = null;
+        this.enabled = true;
+        this.masterVolume = 0.25;
+        this.masterGain = null;
+        this.reverbNode = null;
+
+        const unlock = () => {
+            if (this.ctx) return;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = this.masterVolume;
+            this.masterGain.connect(this.ctx.destination);
+
+            this.setupReverb();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('keydown', unlock);
+        };
+        window.addEventListener('click', unlock);
+        window.addEventListener('keydown', unlock);
+    }
+
+    async setupReverb() {
+        if (!this.ctx) return;
+        this.reverbNode = this.ctx.createConvolver();
+        const length = this.ctx.sampleRate * 2.0;
+        const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+        for (let i = 0; i < 2; i++) {
+            const data = buffer.getChannelData(i);
+            for (let j = 0; j < length; j++) {
+                data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 2.0);
+            }
+        }
+        this.reverbNode.buffer = buffer;
+        const reverbGain = this.ctx.createGain();
+        reverbGain.gain.value = 0.3;
+        this.reverbNode.connect(reverbGain);
+        reverbGain.connect(this.masterGain);
+    }
+
+    updateGain() {
+        if (!this.ctx || !this.masterGain) return;
+        const target = this.enabled ? this.masterVolume : 0;
+        this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+    }
+
+    setVolume(vol) {
+        this.masterVolume = vol;
+        this.updateGain();
+    }
+
+    setEnabled(enabled) {
+        this.enabled = enabled;
+        this.updateGain();
+    }
+
+    play(name) {
+        if (!this.enabled || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        this.updateGain(); // Ensure gain is synced before playing
+
+        const now = this.ctx.currentTime;
+
+        // Helper to get master destination (Dry + Reverb)
+        const connect = (node) => {
+            const master = this.ctx.createGain();
+            master.gain.value = this.masterVolume;
+            node.connect(master);
+            master.connect(this.ctx.destination);
+            if (this.reverbNode) node.connect(this.reverbNode);
+            return master;
+        };
+
+        switch (name) {
+            case 'click':
+                this.playTone({ freq: 880, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.2 });
+                break;
+            case 'hover':
+                this.playTone({ freq: 440, dur: 0.08, type: 'sine', attack: 0.005, decay: 0.03, vol: 0.05 });
+                break;
+            case 'select':
+                this.playTone({ freq: 550, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.15 });
+                break;
+            case 'roll':
+                this.playNoise({ dur: 0.4, vol: 0.1, low: 100, high: 600, sweep: true });
+                break;
+            case 'bank':
+                this.playSweep({ start: 330, end: 660, dur: 0.4, attack: 0.05, decay: 0.3, vol: 0.2 });
+                break;
+            case 'farkle':
+                this.playSweep({ start: 220, end: 110, dur: 0.8, attack: 0.1, decay: 0.7, vol: 0.2 });
+                break;
+            case 'success':
+                this.playArp({ freqs: [440, 554, 659], interval: 0.05, vol: 0.2, dur: 0.3 });
+                break;
+            case 'hot_dice':
+                this.playArp({ freqs: [659, 880, 1108, 1318], interval: 0.04, vol: 0.2, dur: 0.4 });
+                break;
+            case 'menu_open':
+                this.playTone({ freq: 220, dur: 0.2, type: 'sine', attack: 0.05, decay: 0.1, vol: 0.1 });
+                break;
+            case 'msg':
+                this.playArp({ freqs: [880, 1108], interval: 0.06, vol: 0.2, dur: 0.3 });
+                break;
+        }
+    }
+
+    playTone({ freq, dur, type = 'sine', attack = 0.01, decay = 0.1, vol = 1 }) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
+
+        osc.connect(gain);
+        this.connectToMaster(gain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + attack + decay + 0.1);
+    }
+
+    playSweep({ start, end, dur, attack = 0.05, decay = 0.2, vol = 1, type = 'sine' }) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(start, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(end, this.ctx.currentTime + dur);
+
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
+
+        osc.connect(gain);
+        this.connectToMaster(gain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + dur + 0.1);
+    }
+
+    playNoise({ dur, vol, low = 100, high = 1000, sweep = false }) {
+        const bufferSize = this.ctx.sampleRate * dur;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(high, this.ctx.currentTime);
+        if (sweep) {
+            filter.frequency.exponentialRampToValueAtTime(low, this.ctx.currentTime + dur);
         }
 
-        this.debugPanel.appendChild(line);
-        console.log(`[SYSTEM] ${msg}`);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        this.connectToMaster(gain);
+
+        noise.start();
+        noise.stop(this.ctx.currentTime + dur);
+    }
+
+    playChord({ freqs, dur, vol = 1, attack = 0.1 }) {
+        freqs.forEach(f => {
+            this.playTone({ freq: f, dur: dur, type: 'sine', attack: attack, decay: dur - attack, vol: vol / freqs.length });
+        });
+    }
+
+    playArp({ freqs, interval, vol = 1, dur = 0.2 }) {
+        freqs.forEach((f, i) => {
+            setTimeout(() => {
+                if (!this.ctx) return;
+                this.playTone({ freq: f, dur: dur, type: 'sine', attack: 0.05, decay: dur, vol: vol });
+            }, i * interval * 1000);
+        });
+    }
+
+    connectToMaster(node) {
+        if (!this.ctx || !this.masterGain) return;
+        node.connect(this.masterGain);
+        if (this.reverbNode) node.connect(this.reverbNode);
+    }
+
+    toggle() {
+        this.setEnabled(!this.enabled);
+        return this.enabled;
     }
 }
 
 class Dice3DManager {
-    constructor(container) {
+    constructor(container, client) {
         if (!container) return;
         this.container = container;
+        this.client = client;
         this.diceObjects = [];
         this.isRunning = false;
         this.isSpeed = false; // Default speed
@@ -1624,6 +2115,7 @@ class Dice3DManager {
             this.spawnDice(values);
             this.isRunning = true;
             this.rollStartTime = Date.now();
+            if (this.client && this.client.sounds) this.client.sounds.play('roll');
 
             // Adjust duration based on speed
             const duration = this.isSpeed ? 400 : 1200;
@@ -1662,6 +2154,17 @@ class Dice3DManager {
 
             body.velocity.set((Math.random() - 0.5) * 20 * velMult, -60 * velMult, (Math.random() - 0.5) * 20 * velMult);
             body.angularVelocity.set((Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult);
+
+            // Add collision sound
+            body.addEventListener('collide', (e) => {
+                const relativeVelocity = e.contact.getImpactVelocityAlongNormal();
+                if (relativeVelocity > 2) { // Only play if impact is strong enough
+                    if (this.client && this.client.sounds) {
+                        this.client.sounds.play('dice_hit');
+                    }
+                }
+            });
+
             this.world.addBody(body);
             this.diceObjects.push({ mesh, body, targetVal: val });
         });
@@ -1737,4 +2240,31 @@ class Dice3DManager {
         });
     }
 }
-window.farkle = new FarkleClient();
+
+// Wait for DOM to be fully loaded before initializing
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            window.farkle = new FarkleClient();
+        } catch (e) {
+            console.error('Failed to initialize Farkle Client:', e);
+            const errorEl = document.getElementById('global-error-display');
+            if (errorEl) {
+                errorEl.style.display = 'block';
+                errorEl.textContent = `Critical error: ${e.message}\n\nPlease refresh the page.`;
+            }
+        }
+    });
+} else {
+    // DOM already loaded
+    try {
+        window.farkle = new FarkleClient();
+    } catch (e) {
+        console.error('Failed to initialize Farkle Client:', e);
+        const errorEl = document.getElementById('global-error-display');
+        if (errorEl) {
+            errorEl.style.display = 'block';
+            errorEl.textContent = `Critical error: ${e.message}\n\nPlease refresh the page.`;
+        }
+    }
+}

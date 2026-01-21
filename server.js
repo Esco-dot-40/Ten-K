@@ -34,6 +34,18 @@ app.post('/api/analytics/identify', (req, res) => {
     res.json({ success: true });
 });
 
+// Stats/Leaderboard Endpoint
+app.get('/api/stats/leaderboard', async (req, res) => {
+    try {
+        const { database } = await import('./db.js');
+        const leaderboard = await database.getLeaderboard();
+        res.json(leaderboard);
+    } catch (e) {
+        console.error('[Stats] Failed to fetch leaderboard:', e);
+        res.status(500).json({ error: 'Failed to fetch leaderboard' });
+    }
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
@@ -170,6 +182,47 @@ class GameState {
         this.winner = null;
         this.hostId = null; // Track Host
         this.boardClears = 0; // Track how many times board was cleared in a turn
+        this.locked = false; // Prevent actions during delays (farkle timeouts, etc)
+
+        this.votes = {
+            reset: new Set(),
+            next: new Set(),
+            type: null // 'reset' or 'next'
+        };
+    }
+
+    startVote(type, playerId) {
+        if (this.votes.type) return { error: "A vote is already in progress" };
+        if (type !== 'reset' && type !== 'next') return { error: "Invalid vote type" };
+
+        this.votes.type = type;
+        this.votes[type] = new Set([playerId]);
+        return { success: true };
+    }
+
+    castVote(playerId) {
+        if (!this.votes.type) return { error: "No vote in progress" };
+        this.votes[this.votes.type].add(playerId);
+        return { success: true };
+    }
+
+    checkVotePassed() {
+        if (!this.votes.type) return false;
+        const connectedPlayers = this.players.filter(p => p.connected);
+        const total = connectedPlayers.length;
+        const count = this.votes[this.votes.type].size;
+
+        if (total === 2) {
+            return count === 2;
+        } else {
+            return count / total >= 0.6;
+        }
+    }
+
+    clearVotes() {
+        this.votes.type = null;
+        this.votes.reset = new Set();
+        this.votes.next = new Set();
     }
 
     addPlayer(id, name, reconnectToken, dbId) {
@@ -240,7 +293,7 @@ class GameState {
     }
 
     roll(playerId, useHighStakes = false) {
-        if (this.gameStatus !== 'playing') return { error: "Game not active" };
+        if (this.gameStatus !== 'playing' || this.locked) return { error: "Game not active or busy" };
         const player = this.getCurrentPlayer();
         if (player.id !== playerId) return { error: "Not your turn" };
 
@@ -342,7 +395,7 @@ class GameState {
             dice: newDice,
             farkle,
             roundScore: this.roundAccumulatedScore,
-            hotDice: (triggeredHotDice && !farkle && this.boardClears > 1)
+            hotDice: (triggeredHotDice && !farkle)
         };
     }
 
@@ -360,7 +413,7 @@ class GameState {
     }
 
     bank(playerId) {
-        if (this.gameStatus !== 'playing') return;
+        if (this.gameStatus !== 'playing' || this.locked) return;
         const player = this.players[this.currentPlayerIndex];
         if (player.id !== playerId) return;
 
@@ -467,27 +520,25 @@ class GameState {
     }
 
     async endGame() {
-        // Determine winner based on highest score
-        let winner = this.players[0];
-        for (const p of this.players) {
-            if (p.score > winner.score) winner = p;
-        }
-
+        if (this.gameStatus === 'finished') return;
         this.gameStatus = 'finished';
-        this.winner = winner;
 
-        // Record Stats for all players
+        // Determine winner
+        const sorted = [...this.players].sort((a, b) => b.score - a.score);
+        this.winner = (sorted.length > 1 && sorted[0].score === sorted[1].score) ? 'tie' : sorted[0];
+
+        // Record Stats
         for (const p of this.players) {
-            const isWin = (p.id === winner.id);
+            const isWin = (this.winner !== 'tie' && p.id === this.winner.id);
             try {
                 if (p.dbId) {
                     await db.recordGameEnd(p.dbId, isWin, p.score, 0, p.farkles || 0);
                 }
-            } catch (e) { console.error("Stats Error", e); }
+            } catch (e) { console.error("Stats Error:", e); }
         }
 
         io.to(this.roomCode).emit('game_over', {
-            winner: winner.name,
+            winner: this.winner === 'tie' ? 'Tie' : this.winner.name,
             scores: this.players.map(p => ({ name: p.name, score: p.score }))
         });
     }
@@ -498,15 +549,7 @@ class GameState {
         if (p.score >= winTarget && !this.isFinalRound) {
             this.isFinalRound = true;
             this.finalRoundTriggeredBy = this.currentPlayerIndex;
-        }
-    }
-
-    endGame() {
-        this.gameStatus = 'finished';
-        const sorted = [...this.players].sort((a, b) => b.score - a.score);
-        this.winner = sorted[0];
-        if (sorted.length > 1 && sorted[0].score === sorted[1].score) {
-            this.winner = 'tie';
+            console.log(`[Game ${this.roomCode}] Final Round Triggered by ${p.name}`);
         }
     }
 
@@ -524,7 +567,13 @@ class GameState {
             isFinalRound: this.isFinalRound,
             canHighStakes: this.canHighStakes,
             rules: this.rules,
-            hostId: this.hostId
+            hostId: this.hostId,
+            activeVote: this.votes.type ? {
+                type: this.votes.type,
+                count: this.votes[this.votes.type].size,
+                needed: this.players.filter(p => p.connected).length === 2 ? 2 : Math.ceil(this.players.filter(p => p.connected).length * 0.6),
+                voters: Array.from(this.votes[this.votes.type])
+            } : null
         };
     }
 }
@@ -709,6 +758,8 @@ io.on('connection', (socket) => {
         if (result.error) {
             socket.emit('error', result.error);
         } else {
+            if (result.farkle) game.locked = true;
+
             io.to(roomCode).emit('roll_result', {
                 dice: result.dice,
                 farkle: result.farkle,
@@ -720,6 +771,7 @@ io.on('connection', (socket) => {
                 const delay = (game.rules.category === 'speed') ? 1000 : 2500;
                 setTimeout(() => {
                     game.farkle();
+                    game.locked = false;
                     io.to(roomCode).emit('game_state_update', game.getState());
                 }, delay);
             }
@@ -813,26 +865,85 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('start_vote', ({ roomCode, type }) => {
+        const game = games.get(roomCode);
+        if (!game) return;
+        const res = game.startVote(type, socket.id);
+        if (res.error) {
+            socket.emit('error', res.error);
+        } else {
+            const userName = game.players.find(p => p.id === socket.id)?.name || "A player";
+            io.to(roomCode).emit('chat_message', {
+                sender: "System",
+                message: `${userName} started a vote to ${type === 'next' ? 'skip turn' : 'restart game'}.`,
+                isSystem: true
+            });
+            io.to(roomCode).emit('game_state_update', game.getState());
+        }
+    });
+
+    socket.on('cast_vote', ({ roomCode }) => {
+        const game = games.get(roomCode);
+        if (!game) return;
+        const res = game.castVote(socket.id);
+        if (res.error) {
+            socket.emit('error', res.error);
+        } else {
+            if (game.checkVotePassed()) {
+                const type = game.votes.type;
+                io.to(roomCode).emit('chat_message', {
+                    sender: "System",
+                    message: `Vote passed! Executing ${type}...`,
+                    isSystem: true
+                });
+
+                if (type === 'next') {
+                    game.nextTurn();
+                } else {
+                    game.gameStatus = 'playing';
+                    game.players.forEach(p => p.score = 0);
+                    game.currentPlayerIndex = 0;
+                    game.resetRound();
+                    game.isFinalRound = false;
+                    game.winner = null;
+                }
+                game.clearVotes();
+                io.to(roomCode).emit('game_state_update', game.getState());
+            } else {
+                io.to(roomCode).emit('game_state_update', game.getState());
+            }
+        }
+    });
+
     socket.on('force_next_turn', ({ roomCode }) => {
         const game = games.get(roomCode);
         if (game && game.gameStatus === 'playing') {
-            if (game.hostId !== socket.id) return; // Only host
-            game.nextTurn();
-            io.to(roomCode).emit('game_state_update', game.getState());
+            // Keep host override but encourage voting
+            if (game.hostId === socket.id) {
+                game.nextTurn();
+                game.clearVotes();
+                io.to(roomCode).emit('game_state_update', game.getState());
+            } else {
+                socket.emit('error', "Use the Vote button or ask the Host.");
+            }
         }
     });
 
     socket.on('debug_restart_preserve', ({ roomCode }) => {
         const game = games.get(roomCode);
         if (game) {
-            if (game.hostId !== socket.id) return; // Only host
-            game.gameStatus = 'playing';
-            game.players.forEach(p => p.score = 0);
-            game.currentPlayerIndex = 0;
-            game.resetRound();
-            game.isFinalRound = false;
-            game.winner = null;
-            io.to(roomCode).emit('game_start', game.getState());
+            if (game.hostId === socket.id) {
+                game.gameStatus = 'playing';
+                game.players.forEach(p => p.score = 0);
+                game.currentPlayerIndex = 0;
+                game.resetRound();
+                game.isFinalRound = false;
+                game.winner = null;
+                game.clearVotes();
+                io.to(roomCode).emit('game_start', game.getState());
+            } else {
+                socket.emit('error', "Use the Vote button or ask the Host.");
+            }
         }
     });
 
