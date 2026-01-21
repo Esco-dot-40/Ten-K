@@ -1354,6 +1354,12 @@ class FarkleClient {
             const forceBtn = document.getElementById('force-next-action-btn');
             const restartBtn = document.getElementById('force-reset-action-btn');
 
+            // Add null checks before manipulating buttons
+            if (!forceBtn || !restartBtn) {
+                console.warn('Voting buttons not found in DOM');
+                return;
+            }
+
             const activeVote = this.gameState.activeVote;
 
             // Handle Force Next Button
