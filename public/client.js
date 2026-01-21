@@ -105,7 +105,8 @@ class FarkleClient {
                 });
             }
 
-            this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer);
+            this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer, this);
+            this.sounds = new SoundManager();
 
             // Speed Mode Hookup
             const speedBtn = document.getElementById('mode-speed-btn');
@@ -437,6 +438,8 @@ class FarkleClient {
             name: finalName,
             dbId: this.discordId || null
         });
+
+        this.sounds.play('click');
     }
 
     async updateDiscordPresence(details, state) {
@@ -466,6 +469,7 @@ class FarkleClient {
         if (this.ui.settingsModal) {
             this.ui.settingsModal.querySelector('.close-modal').addEventListener('click', () => {
                 this.ui.settingsModal.classList.add('hidden');
+                this.sounds.play('click');
             });
         }
 
@@ -652,6 +656,7 @@ class FarkleClient {
         if (closeBtn) {
             closeBtn.onclick = () => {
                 modal.classList.add('hidden');
+                this.sounds.play('click');
             };
         }
 
@@ -716,6 +721,7 @@ class FarkleClient {
                     .map(el => el.dataset.id)
                     .filter(id => id);
                 this.socket.emit('roll', { roomCode: this.roomCode, confirmedSelections: selectedIds, useHighStakes: false });
+                this.sounds.play('click');
             }
         });
 
@@ -725,6 +731,7 @@ class FarkleClient {
                     .map(el => el.dataset.id)
                     .filter(id => id);
                 this.socket.emit('bank', { roomCode: this.roomCode, confirmedSelections: selectedIds });
+                this.sounds.play('bank');
             }
         });
 
@@ -734,6 +741,7 @@ class FarkleClient {
                 const id = dieEl.dataset.id;
                 dieEl.classList.toggle('selected');
                 this.socket.emit('toggle_die', { roomCode: this.roomCode, dieId: id });
+                this.sounds.play('select');
                 // Trigger UI update immediately for responsiveness
                 this.renderControls();
             }
@@ -776,6 +784,11 @@ class FarkleClient {
                 if (e.key === 'Enter') this.sendChat();
             });
         }
+
+        // Add hover sounds to all buttons
+        document.querySelectorAll('.btn, .icon-btn, .die, .room-card, .theme-btn').forEach(el => {
+            el.addEventListener('mouseenter', () => this.sounds.play('hover'));
+        });
 
         // --- Hotkeys ---
         document.addEventListener('keydown', (e) => {
@@ -895,6 +908,7 @@ class FarkleClient {
 
                 if (data.farkle) {
                     this.showFeedback("FARKLE!", "error");
+                    this.sounds.play('farkle');
                     // Buffer delay: maintain isRolling=true to catch incoming state updates in pendingState
                     const delay = this.isSpeedMode ? 800 : 2000;
                     await new Promise(r => setTimeout(r, delay));
@@ -908,6 +922,7 @@ class FarkleClient {
                 this.updateGameState(finalState);
                 if (data.hotDice) {
                     this.showFeedback("HOT DICE!", "hot-dice");
+                    this.sounds.play('hot_dice');
                 }
             });
         });
@@ -1501,10 +1516,51 @@ class FarkleClient {
     }
 }
 
+class SoundManager {
+    constructor() {
+        this.enabled = true;
+        this.sounds = {
+            click: new Audio('/assets/sounds/click.mp3'),
+            hover: new Audio('/assets/sounds/hover.mp3'),
+            select: new Audio('/assets/sounds/select.mp3'),
+            roll: new Audio('/assets/sounds/roll.mp3'),
+            dice_hit: new Audio('/assets/sounds/dice_hit.mp3'),
+            bank: new Audio('/assets/sounds/bank.mp3'),
+            farkle: new Audio('/assets/sounds/farkle.mp3'),
+            success: new Audio('/assets/sounds/success.mp3'),
+            hot_dice: new Audio('/assets/sounds/hot_dice.mp3'),
+            menu_open: new Audio('/assets/sounds/menu_open.mp3')
+        };
+
+        // Preload and config
+        Object.values(this.sounds).forEach(s => {
+            s.load();
+            s.volume = 0.4;
+        });
+        this.sounds.dice_hit.volume = 0.2;
+        this.sounds.hover.volume = 0.15;
+    }
+
+    play(name, force = false) {
+        if (!this.enabled && !force) return;
+        const s = this.sounds[name];
+        if (s) {
+            s.currentTime = 0;
+            s.play().catch(() => { }); // Catch browser auto-play blocks
+        }
+    }
+
+    toggle() {
+        this.enabled = !this.enabled;
+        return this.enabled;
+    }
+}
+
 class Dice3DManager {
-    constructor(container) {
+    constructor(container, client) {
         if (!container) return;
         this.container = container;
+        this.client = client;
         this.diceObjects = [];
         this.isRunning = false;
         this.isSpeed = false; // Default speed
@@ -1624,6 +1680,7 @@ class Dice3DManager {
             this.spawnDice(values);
             this.isRunning = true;
             this.rollStartTime = Date.now();
+            if (this.client && this.client.sounds) this.client.sounds.play('roll');
 
             // Adjust duration based on speed
             const duration = this.isSpeed ? 400 : 1200;
@@ -1662,6 +1719,17 @@ class Dice3DManager {
 
             body.velocity.set((Math.random() - 0.5) * 20 * velMult, -60 * velMult, (Math.random() - 0.5) * 20 * velMult);
             body.angularVelocity.set((Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult, (Math.random() - 0.5) * 40 * velMult);
+
+            // Add collision sound
+            body.addEventListener('collide', (e) => {
+                const relativeVelocity = e.contact.getImpactVelocityAlongNormal();
+                if (relativeVelocity > 2) { // Only play if impact is strong enough
+                    if (this.client && this.client.sounds) {
+                        this.client.sounds.play('dice_hit');
+                    }
+                }
+            });
+
             this.world.addBody(body);
             this.diceObjects.push({ mesh, body, targetVal: val });
         });
