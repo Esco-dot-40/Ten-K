@@ -34,6 +34,18 @@ app.post('/api/analytics/identify', (req, res) => {
     res.json({ success: true });
 });
 
+// Stats/Leaderboard Endpoint
+app.get('/api/stats/leaderboard', async (req, res) => {
+    try {
+        const { database } = await import('./db.js');
+        const leaderboard = await database.getLeaderboard();
+        res.json(leaderboard);
+    } catch (e) {
+        console.error('[Stats] Failed to fetch leaderboard:', e);
+        res.status(500).json({ error: 'Failed to fetch leaderboard' });
+    }
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {

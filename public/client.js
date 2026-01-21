@@ -107,7 +107,10 @@ class FarkleClient {
                 chatNotifications: document.getElementById('chat-notifications'),
                 volumeSlider: document.getElementById('volume-slider'),
                 muteBtn: document.getElementById('mute-btn'),
-                volumeIcon: document.getElementById('volume-icon')
+                volumeIcon: document.getElementById('volume-icon'),
+                statsBtn: document.getElementById('stats-btn'),
+                statsModal: document.getElementById('stats-modal'),
+                statsContent: document.getElementById('stats-content')
             };
 
             // Hook up start button
@@ -812,6 +815,15 @@ class FarkleClient {
 
         this.ui.rulesBtn.addEventListener('click', () => this.ui.rulesModal.classList.remove('hidden'));
         this.ui.rulesModal.querySelector('.close-modal').addEventListener('click', () => this.ui.rulesModal.classList.add('hidden'));
+
+        if (this.ui.statsBtn) {
+            this.ui.statsBtn.addEventListener('click', () => this.showStats());
+        }
+        if (this.ui.statsModal) {
+            this.ui.statsModal.querySelector('.close-modal').addEventListener('click', () => {
+                this.ui.statsModal.classList.add('hidden');
+            });
+        }
 
         this.ui.restartBtn.addEventListener('click', () => {
             this.socket.emit('restart', { roomCode: this.roomCode });
@@ -1624,6 +1636,51 @@ class FarkleClient {
                 setTimeout(() => notif.remove(), 400);
             }
         }, 5000);
+    }
+
+    async showStats() {
+        if (!this.ui.statsModal || !this.ui.statsContent) return;
+
+        this.ui.statsModal.classList.remove('hidden');
+        this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading statistics...</p>';
+
+        try {
+            const response = await fetch('/api/stats/leaderboard');
+            if (!response.ok) throw new Error('Failed to fetch stats');
+
+            const stats = await response.json();
+
+            if (!stats || stats.length === 0) {
+                this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No stats available yet. Play some games!</p>';
+                return;
+            }
+
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
+            html += '<th style="padding: 0.75rem; text-align: left; color: var(--primary);">Player</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Wins</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Games</th>';
+            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Win %</th>';
+            html += '<th style="padding: 0.75rem; text-align: right; color: var(--primary);">High Score</th>';
+            html += '</tr></thead><tbody>';
+
+            stats.forEach((player, idx) => {
+                const winRate = player.gamesPlayed > 0 ? Math.round((player.wins / player.gamesPlayed) * 100) : 0;
+                html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
+                html += `<td style="padding: 0.75rem; font-weight: 600;">${idx + 1}. ${player.name || 'Anonymous'}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center; color: var(--success);">${player.wins}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center;">${player.gamesPlayed}</td>`;
+                html += `<td style="padding: 0.75rem; text-align: center;">${winRate}%</td>`;
+                html += `<td style="padding: 0.75rem; text-align: right; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</td>`;
+                html += `</tr>`;
+            });
+
+            html += '</tbody></table>';
+            this.ui.statsContent.innerHTML = html;
+        } catch (e) {
+            console.error('Failed to load stats:', e);
+            this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--danger);">Failed to load statistics. Try again later.</p>';
+        }
     }
 
     createBackgroundEffects() {
