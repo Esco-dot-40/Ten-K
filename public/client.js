@@ -1312,7 +1312,18 @@ class FarkleClient {
                 startBtn.className = 'btn primary pulse';
                 startBtn.textContent = 'Start Game';
                 startBtn.onclick = () => this.socket.emit('start_game', { roomCode: this.roomCode });
-                if (this.ui.rollBtn.parentElement) this.ui.rollBtn.parentElement.appendChild(startBtn);
+
+                // Try multiple possible parent elements with fallbacks
+                const container = this.ui.rollBtn?.parentElement
+                    || document.querySelector('.button-group')
+                    || document.querySelector('.controls')
+                    || document.querySelector('.game-board');
+
+                if (container) {
+                    container.appendChild(startBtn);
+                } else {
+                    console.error('Could not find container for Start Game button');
+                }
             }
             if (this.gameState.players.length >= 2) {
                 startBtn.style.display = 'block';
