@@ -685,6 +685,13 @@ io.on('connection', (socket) => {
                         break;
                     }
                 }
+            } else {
+                // Ensure name is unique in this room
+                let baseName = name;
+                let counter = 1;
+                while (game.players.some(p => p.name === name)) {
+                    name = `${baseName} (${++counter})`;
+                }
             }
 
             if (game.players.length >= 10) {
@@ -740,6 +747,19 @@ io.on('connection', (socket) => {
                 socket.leave(game.roomCode);
                 io.emit('room_list', getRoomList());
                 io.to(game.roomCode).emit('game_state_update', game.getState());
+            }
+        }
+    });
+
+    socket.on('start_game', ({ roomCode }) => {
+        const game = games.get(roomCode);
+        if (game && game.gameStatus === 'waiting') {
+            const started = game.start();
+            if (started) {
+                io.to(roomCode).emit('game_start', game.getState());
+                io.emit('room_list', getRoomList());
+            } else {
+                socket.emit('error', 'Need at least 2 players to start');
             }
         }
     });

@@ -116,7 +116,10 @@ class FarkleClient {
             // Hook up start button
             if (this.ui.startGameBtn) {
                 this.ui.startGameBtn.addEventListener('click', () => {
-                    // No-op, managed by logic
+                    if (this.roomCode) {
+                        this.socket.emit('start_game', { roomCode: this.roomCode });
+                        this.sounds.play('click');
+                    }
                 });
             }
 
@@ -1313,39 +1316,19 @@ class FarkleClient {
             this.ui.currentScoreDisplay.textContent = "Waiting for players...";
             this.ui.rollBtn.style.display = 'none';
             this.ui.bankBtn.style.display = 'none';
-            // Remove High Stakes btn if present
-            const hsBtn = document.getElementById('hs-roll-btn');
-            if (hsBtn) hsBtn.remove();
 
-            let startBtn = document.getElementById('lobby-start-btn');
-            if (!startBtn) {
-                startBtn = document.createElement('button');
-                startBtn.id = 'lobby-start-btn';
-                startBtn.className = 'btn primary pulse';
-                startBtn.textContent = 'Start Game';
-                startBtn.onclick = () => this.socket.emit('start_game', { roomCode: this.roomCode });
-
-                // Try multiple possible parent elements with fallbacks
-                const container = this.ui.rollBtn?.parentElement
-                    || document.querySelector('.button-group')
-                    || document.querySelector('.controls')
-                    || document.querySelector('.game-board');
-
-                if (container) {
-                    container.appendChild(startBtn);
+            const startBtn = this.ui.startGameBtn;
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                if (this.gameState.players.length >= 2) {
+                    startBtn.disabled = false;
+                    startBtn.classList.add('pulse');
+                    this.ui.actionText.textContent = "Lobby Ready! Start Game?";
                 } else {
-                    console.error('Could not find container for Start Game button');
+                    startBtn.disabled = true;
+                    startBtn.classList.remove('pulse');
+                    this.ui.actionText.textContent = `Need ${2 - this.gameState.players.length} more`;
                 }
-            }
-            if (this.gameState.players.length >= 2) {
-                startBtn.style.display = 'block';
-                startBtn.disabled = false;
-                startBtn.classList.add('pulse');
-                this.ui.actionText.textContent = "Lobby Ready! Start Game?";
-            } else {
-                startBtn.style.display = 'block';
-                startBtn.disabled = true;
-                this.ui.actionText.textContent = `Need ${2 - this.gameState.players.length} more`;
             }
             return;
         }
