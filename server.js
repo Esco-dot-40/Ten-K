@@ -383,7 +383,7 @@ class GameState {
             dice: newDice,
             farkle,
             roundScore: this.roundAccumulatedScore,
-            hotDice: (triggeredHotDice && !farkle && this.boardClears > 0)
+            hotDice: (triggeredHotDice && !farkle)
         };
     }
 

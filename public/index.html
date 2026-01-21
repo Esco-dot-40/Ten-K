@@ -89,10 +89,9 @@
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
             </button>
-            <button id="leave-btn" class="icon-btn" aria-label="Leave Game" style="margin-left: 0.5rem;"
-                title="Leave Table">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
+            <button id="leave-btn" class="icon-btn" title="Leave Game"
+                style="width: 44px; transition: width 0.3s; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                     <polyline points="16 17 21 12 16 7"></polyline>
                     <line x1="21" y1="12" x2="9" y2="12"></line>
@@ -100,6 +99,15 @@
                 <span style="font-size: 0.7rem; font-weight: 800; margin-left: 4px; display: none;"
                     id="leave-text">LEAVE</span>
             </button>
+            <div class="header-actions" style="display: flex; gap: 8px;">
+                <button id="quick-mute-btn" class="icon-btn" title="Toggle Sound">
+                    <svg class="mute-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                </button>
+            </div>
         </header>
 
         <main class="game-board">
@@ -194,14 +202,28 @@
 
         <div id="settings-modal" class="modal hidden">
             <div class="modal-content">
-                <h2>Settings</h2>
+                <header class="modal-header"
+                    style="display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)"
+                        stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                    <h2 style="margin: 0; font-size: 1.5rem; letter-spacing: 1px;">Table Settings</h2>
+                </header>
                 <div class="input-group">
-                    <label>Felt Color</label>
+                    <label>Table Felt</label>
                     <div class="theme-options">
-                        <button class="theme-btn" data-theme="green" style="background: #0f3d24;"></button>
-                        <button class="theme-btn" data-theme="blue" style="background: #1e3a8a;"></button>
-                        <button class="theme-btn" data-theme="red" style="background: #7f1d1d;"></button>
-                        <button class="theme-btn" data-theme="purple" style="background: #581c87;"></button>
+                        <button class="theme-btn" data-theme="green" title="Classic Green"
+                            style="background: #1a3a2a;"></button>
+                        <button class="theme-btn" data-theme="blue" title="Deep Navy"
+                            style="background: #1a2a4a;"></button>
+                        <button class="theme-btn" data-theme="red" title="Royal Burgundy"
+                            style="background: #4a1a1a;"></button>
+                        <button class="theme-btn" data-theme="purple" title="Midnight Purple"
+                            style="background: #2a1a4a;"></button>
                     </div>
                 </div>
                 <div class="input-group">

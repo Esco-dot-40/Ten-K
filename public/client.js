@@ -430,7 +430,7 @@ class FarkleClient {
                     state: state,
                     assets: {
                         large_image: "farkle_icon",
-                        large_text: "Farkle"
+                        large_text: "Ten-K"
                     }
                 }
             });
@@ -438,10 +438,25 @@ class FarkleClient {
         }
     }
 
+    toggleMute() {
+        const isMuted = !this.sounds.enabled;
+        this.sounds.enabled = !isMuted;
+
+        const muteBtns = [this.ui.muteBtn, document.getElementById('quick-mute-btn')];
+        muteBtns.forEach(btn => {
+            if (btn) btn.classList.toggle('muted', isMuted);
+        });
+
+        this.updateVolumeIcon(isMuted ? 0 : this.sounds.masterVolume);
+        if (!isMuted) this.sounds.play('click');
+        localStorage.setItem('farkle_muted', isMuted);
+    }
+
     initSettings() {
         if (this.ui.settingsBtn) {
             this.ui.settingsBtn.addEventListener('click', () => {
                 this.ui.settingsModal.classList.remove('hidden');
+                this.sounds.play('menu_open');
             });
         }
         if (this.ui.settingsModal) {
@@ -458,13 +473,13 @@ class FarkleClient {
         themeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const theme = btn.dataset.theme;
-                let color = '#0f3d24'; // default green
-                if (theme === 'blue') color = '#1e3a8a';
-                if (theme === 'red') color = '#7f1d1d';
-                if (theme === 'purple') color = '#581c87';
+                let color = '#1a3a2a'; // Muted dark green
+                if (theme === 'blue') color = '#1a2a4a'; // Muted navy
+                if (theme === 'red') color = '#4a1a1a'; // Muted burgundy
+                if (theme === 'purple') color = '#2a1a4a'; // Muted deep purple
                 document.body.style.background = color;
                 themeBtns.forEach(b => b.classList.toggle('active', b === btn));
-                this.sounds.play('click');
+                this.sounds.play('select');
             });
         });
 
@@ -484,7 +499,6 @@ class FarkleClient {
             });
         }
 
-        // --- Audio Settings ---
         if (this.ui.volumeSlider) {
             this.ui.volumeSlider.addEventListener('input', (e) => {
                 const vol = parseFloat(e.target.value);
@@ -495,16 +509,15 @@ class FarkleClient {
         }
 
         if (this.ui.muteBtn) {
-            this.ui.muteBtn.addEventListener('click', () => {
-                const isMuted = !this.sounds.enabled;
-                this.sounds.enabled = !isMuted;
-                this.ui.muteBtn.classList.toggle('active', isMuted);
-                this.updateVolumeIcon(isMuted ? 0 : this.sounds.masterVolume);
-                this.sounds.play('click');
-            });
+            this.ui.muteBtn.addEventListener('click', () => this.toggleMute());
         }
 
-        // Restore Volume
+        const quickMute = document.getElementById('quick-mute-btn');
+        if (quickMute) {
+            quickMute.addEventListener('click', () => this.toggleMute());
+        }
+
+        // Restore Settings
         const savedVol = localStorage.getItem('farkle_volume');
         if (savedVol !== null && this.ui.volumeSlider) {
             const vol = parseFloat(savedVol);
@@ -512,15 +525,23 @@ class FarkleClient {
             this.sounds.masterVolume = vol;
             this.updateVolumeIcon(vol);
         }
+
+        const savedMuted = localStorage.getItem('farkle_muted') === 'true';
+        if (savedMuted) {
+            this.sounds.enabled = false;
+            this.toggleMute();
+        }
     }
 
     updateVolumeIcon(vol) {
-        if (!this.ui.volumeIcon) return;
-        if (vol <= 0 || !this.sounds.enabled) {
-            this.ui.volumeIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l5 5m0-5l-5 5"></path><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>`;
-        } else {
-            this.ui.volumeIcon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
-        }
+        const isMuted = vol <= 0 || !this.sounds.enabled;
+        const iconHtml = isMuted ?
+            `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9l5 5m0-5l-5 5"></path><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>` :
+            `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+
+        if (this.ui.volumeIcon) this.ui.volumeIcon.innerHTML = iconHtml;
+        const quickMuteIcon = document.querySelector('#quick-mute-btn svg');
+        if (quickMuteIcon) quickMuteIcon.parentElement.innerHTML = iconHtml;
     }
 
     initStatsUI() {
@@ -1607,43 +1628,44 @@ class SoundManager {
         this.ctx = null;
         this.enabled = true;
         this.masterVolume = 0.25;
+        this.masterGain = null;
         this.reverbNode = null;
 
-        // Unlock audio context on first interaction
         const unlock = () => {
             if (this.ctx) return;
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = this.masterVolume;
+            this.masterGain.connect(this.ctx.destination);
+
             this.setupReverb();
             if (this.ctx.state === 'suspended') this.ctx.resume();
+
             window.removeEventListener('click', unlock);
             window.removeEventListener('keydown', unlock);
-            console.log("✨ [Audio] High-Fidelity Synthesizer Initialized");
         };
         window.addEventListener('click', unlock);
         window.addEventListener('keydown', unlock);
     }
 
     async setupReverb() {
-        if (!this.ctx) return;
+        if (!this.ctx || !this.masterGain) return;
         this.reverbNode = this.ctx.createConvolver();
 
-        // Procedural Reverb Impulse Response (approx. 1.5s of 'tranquil room')
         const length = this.ctx.sampleRate * 1.5;
         const impulse = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
         for (let i = 0; i < 2; i++) {
             const channel = impulse.getChannelData(i);
             for (let j = 0; j < length; j++) {
-                // Exponentially decaying white noise
                 channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 3);
             }
         }
         this.reverbNode.buffer = impulse;
 
-        // Connect reverb to destination
         const reverbGain = this.ctx.createGain();
-        reverbGain.gain.value = 0.3; // Wet level
+        reverbGain.gain.value = 0.2; // Optimized mix
         this.reverbNode.connect(reverbGain);
-        reverbGain.connect(this.ctx.destination);
+        reverbGain.connect(this.masterGain);
     }
 
     play(name) {
@@ -1664,53 +1686,34 @@ class SoundManager {
 
         switch (name) {
             case 'click':
-                // Modern, soft organic tick
-                this.playTone({ freq: 880, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.4 });
+                this.playTone({ freq: 880, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.2 });
                 break;
             case 'hover':
-                // Ethereal swell
-                this.playTone({ freq: 1200, dur: 0.2, type: 'sine', attack: 0.1, decay: 0.1, vol: 0.1 });
+                this.playTone({ freq: 440, dur: 0.08, type: 'sine', attack: 0.005, decay: 0.03, vol: 0.05 });
                 break;
             case 'select':
-                // Resonant wooden tap
-                this.playTone({ freq: 440, dur: 0.15, type: 'triangle', attack: 0.01, decay: 0.1, vol: 0.3 });
-                this.playNoise({ dur: 0.05, vol: 0.1, low: 2000, high: 5000 });
+                this.playTone({ freq: 550, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.05, vol: 0.15 });
                 break;
             case 'roll':
-                // Smooth physical tumble
-                this.playNoise({ dur: 0.6, vol: 0.2, low: 100, high: 800, sweep: true });
-                this.playTone({ freq: 60, dur: 0.6, type: 'sine', attack: 0.1, decay: 0.5, vol: 0.15 });
-                break;
-            case 'dice_hit':
-                // Soft impact
-                this.playNoise({ dur: 0.08, vol: 0.25, low: 1500, high: 4000 });
-                this.playTone({ freq: 180, dur: 0.1, type: 'sine', attack: 0.005, decay: 0.1, vol: 0.3 });
+                this.playNoise({ dur: 0.4, vol: 0.1, low: 100, high: 600, sweep: true });
                 break;
             case 'bank':
-                // Tranquil upward glass shimmer
-                this.playSweep({ start: 440, end: 1760, dur: 0.8, attack: 0.1, decay: 0.7, vol: 0.4, type: 'sine' });
-                this.playChord({ freqs: [880, 1100, 1320], dur: 1.2, vol: 0.2, attack: 0.2 });
+                this.playSweep({ start: 330, end: 660, dur: 0.4, attack: 0.05, decay: 0.3, vol: 0.2 });
                 break;
             case 'farkle':
-                // Gentle "sigh" - minor 7th drop
-                this.playSweep({ start: 330, end: 110, dur: 1.2, attack: 0.1, decay: 1.1, vol: 0.3, type: 'sine' });
-                this.playTone({ freq: 116.54, dur: 1.5, type: 'sine', attack: 0.2, decay: 1.3, vol: 0.15 });
+                this.playSweep({ start: 220, end: 110, dur: 0.8, attack: 0.1, decay: 0.7, vol: 0.2 });
                 break;
             case 'success':
-                // C-Major Glassy Chord
-                this.playChord({ freqs: [523.25, 659.25, 783.99, 1046.50], dur: 1.5, vol: 0.4, attack: 0.1 });
+                this.playArp({ freqs: [440, 554, 659], interval: 0.05, vol: 0.2, dur: 0.3 });
                 break;
             case 'hot_dice':
-                // Ascending "Magic" Arpeggio
-                this.playArp({ freqs: [440, 554, 659, 880, 1108, 1318, 1760], interval: 0.1, vol: 0.25 });
+                this.playArp({ freqs: [659, 880, 1108, 1318], interval: 0.04, vol: 0.2, dur: 0.4 });
                 break;
             case 'menu_open':
-                this.playTone({ freq: 200, dur: 0.3, type: 'sine', attack: 0.1, decay: 0.2, vol: 0.3 });
-                this.playSweep({ start: 200, end: 600, dur: 0.3, attack: 0.05, decay: 0.25, vol: 0.2 });
+                this.playTone({ freq: 220, dur: 0.2, type: 'sine', attack: 0.05, decay: 0.1, vol: 0.1 });
                 break;
             case 'msg':
-                // Tranquil notification chime
-                this.playArp({ freqs: [783.99, 1046.50], interval: 0.08, vol: 0.3, dur: 0.4 });
+                this.playArp({ freqs: [880, 1108], interval: 0.06, vol: 0.2, dur: 0.3 });
                 break;
         }
     }
@@ -1795,10 +1798,11 @@ class SoundManager {
     }
 
     connectToMaster(node) {
-        const master = this.ctx.createGain();
-        master.gain.value = this.masterVolume;
-        node.connect(master);
-        master.connect(this.ctx.destination);
+        if (!this.ctx || !this.masterGain) return;
+        if (this.masterGain.gain.value !== this.masterVolume) {
+            this.masterGain.gain.setTargetAtTime(this.enabled ? this.masterVolume : 0, this.ctx.currentTime, 0.05);
+        }
+        node.connect(this.masterGain);
         if (this.reverbNode) node.connect(this.reverbNode);
     }
 
