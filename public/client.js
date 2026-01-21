@@ -1518,36 +1518,104 @@ class FarkleClient {
 
 class SoundManager {
     constructor() {
+        this.ctx = null;
         this.enabled = true;
-        this.sounds = {
-            click: new Audio('/assets/sounds/click.mp3'),
-            hover: new Audio('/assets/sounds/hover.mp3'),
-            select: new Audio('/assets/sounds/select.mp3'),
-            roll: new Audio('/assets/sounds/roll.mp3'),
-            dice_hit: new Audio('/assets/sounds/dice_hit.mp3'),
-            bank: new Audio('/assets/sounds/bank.mp3'),
-            farkle: new Audio('/assets/sounds/farkle.mp3'),
-            success: new Audio('/assets/sounds/success.mp3'),
-            hot_dice: new Audio('/assets/sounds/hot_dice.mp3'),
-            menu_open: new Audio('/assets/sounds/menu_open.mp3')
-        };
+        this.masterVolume = 0.3;
 
-        // Preload and config
-        Object.values(this.sounds).forEach(s => {
-            s.load();
-            s.volume = 0.4;
-        });
-        this.sounds.dice_hit.volume = 0.2;
-        this.sounds.hover.volume = 0.15;
+        // Unlock audio context on first interaction
+        const unlock = () => {
+            if (this.ctx) return;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            window.removeEventListener('click', unlock);
+            window.removeEventListener('keydown', unlock);
+            console.log("[Audio] Context Unlocked & Synthesizer Ready");
+        };
+        window.addEventListener('click', unlock);
+        window.addEventListener('keydown', unlock);
     }
 
-    play(name, force = false) {
-        if (!this.enabled && !force) return;
-        const s = this.sounds[name];
-        if (s) {
-            s.currentTime = 0;
-            s.play().catch(() => { }); // Catch browser auto-play blocks
+    play(name) {
+        if (!this.enabled || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        switch (name) {
+            case 'click': this.playSynth(880, 0.05, 'triangle', 0.1); break;
+            case 'hover': this.playSynth(1200, 0.02, 'sine', 0.05); break;
+            case 'select': this.playSynth(440, 0.08, 'sine', 0.2); break;
+            case 'roll': this.playNoise(0.4, 0.3, 200, 0.8); break;
+            case 'dice_hit': this.playPerc(150, 0.1, 0.3); break;
+            case 'bank': this.playSweep(440, 880, 0.3, 'sine'); break;
+            case 'farkle': this.playSweep(220, 110, 0.5, 'sawtooth', 0.2); break;
+            case 'success': this.playChord([523.25, 659.25, 783.99], 0.4); break;
+            case 'hot_dice': this.playArp([880, 1100, 1320, 1760], 0.1); break;
+            case 'menu_open': this.playSweep(200, 600, 0.2, 'sine'); break;
         }
+    }
+
+    playSynth(freq, dur, type = 'sine', vol = 1) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + dur);
+    }
+
+    playSweep(startFreq, endFreq, dur, type = 'sine', vol = 1) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + dur);
+        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + dur);
+    }
+
+    playNoise(dur, vol, filterFreq, decay = 0.1) {
+        const bufferSize = this.ctx.sampleRate * dur;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(filterFreq, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(filterFreq / 2, this.ctx.currentTime + dur);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(vol * this.masterVolume, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    }
+
+    playPerc(freq, dur, vol) {
+        this.playSynth(freq, dur, 'sine', vol);
+        this.playNoise(dur / 2, vol * 0.5, 1000);
+    }
+
+    playChord(freqs, dur, vol = 1) {
+        freqs.forEach(f => this.playSynth(f, dur, 'sine', vol / freqs.length));
+    }
+
+    playArp(freqs, interval, vol = 1) {
+        freqs.forEach((f, i) => {
+            setTimeout(() => this.playSynth(f, interval * 2, 'sine', vol), i * interval * 1000);
+        });
     }
 
     toggle() {
