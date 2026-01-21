@@ -90,26 +90,33 @@ import 'dotenv/config';
 // Note: dotenv config is loaded here, ensuring env vars are available
 
 app.post('/api/token', async (req, res) => {
-    const { code, redirectUri } = req.body;
+    const { code } = req.body;
+    let { redirectUri } = req.body;
+    const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
 
     // Quick return for dev/mock mode
     if (code === 'mock_code') return res.json({ access_token: 'mock', user: { id: 'mock', username: 'MockUser', global_name: 'Mock User' } });
 
-    const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
     if (!secret) {
-        console.error("Missing DISCORD_CLIENT_SECRET or DISCORD_SECRET in .env");
-        return res.status(500).json({ error: "Server Configuration Error: Missing Client Secret" });
+        console.error("Missing DISCORD_CLIENT_SECRET in .env");
+        return res.status(500).json({ error: "Server Configuration Error" });
+    }
+
+    // Fallback redirect URI if missing
+    if (!redirectUri) {
+        redirectUri = process.env.DISCORD_CALLBACK_URL;
     }
 
     try {
-        const params = new URLSearchParams({
+        const paramsData = {
             client_id: process.env.DISCORD_CLIENT_ID || '1455067365694771364',
             client_secret: secret,
             grant_type: 'authorization_code',
-            code,
-            redirect_uri: redirectUri
-        });
+            code
+        };
+        if (redirectUri) paramsData.redirect_uri = redirectUri;
 
+        const params = new URLSearchParams(paramsData);
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -117,34 +124,32 @@ app.post('/api/token', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) throw new Error("Auth failed");
+        if (!tokenData.access_token) throw new Error(JSON.stringify(tokenData));
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `Bearer ${tokenData.access_token}` },
         });
         const userData = await userResponse.json();
 
-        // 3. Upsert User into Database
         const { database } = await import('./db.js');
         await database.upsertUser(userData);
 
-        res.json({
-            access_token: tokenData.access_token,
-            user: userData
-        });
-
+        res.json({ access_token: tokenData.access_token, user: userData });
     } catch (err) {
         console.error("RPC Auth Error:", err);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ error: 'Auth Failed' });
     }
 });
 
 // Web Discord Auth Routes
 app.get('/api/access/auth/discord', (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
-    const redirectUri = 'https://farkle.velarixsolutions.nl/api/access/auth/discord/callback';
+    let redirectUri = process.env.DISCORD_CALLBACK_URL;
+    if (!redirectUri) {
+        const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        redirectUri = `${protocol}://${req.get('host')}/api/access/auth/discord/callback`;
+    }
     const scope = encodeURIComponent('identify guilds guilds.members.read');
-
     const url = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
     res.redirect(url);
 });
@@ -153,9 +158,13 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
     const { code } = req.query;
     if (!code) return res.send("Auth failed: No code");
 
-    const secret = process.env.DISCORD_CLIENT_SECRET;
+    const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
     const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
-    const redirectUri = 'https://farkle.velarixsolutions.nl/api/access/auth/discord/callback';
+    let redirectUri = process.env.DISCORD_CALLBACK_URL;
+    if (!redirectUri) {
+        const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        redirectUri = `${protocol}://${req.get('host')}/api/access/auth/discord/callback`;
+    }
 
     try {
         const params = new URLSearchParams({
@@ -173,18 +182,16 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) throw new Error("Token exchange failed");
+        if (!tokenData.access_token) throw new Error(JSON.stringify(tokenData));
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `Bearer ${tokenData.access_token}` },
         });
         const userData = await userResponse.json();
 
-        // Store user in DB
         const { database } = await import('./db.js');
         await database.upsertUser(userData);
 
-        // Send back a script that passes the user data to the opener and closes the popup
         res.send(`
             <script>
                 window.opener.postMessage({
@@ -197,13 +204,12 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
         `);
     } catch (err) {
         console.error("Web Auth Callback Error:", err);
-        res.status(500).send("Authentication failed");
+        res.status(500).send(`Auth Failed: ${err.message}`);
     }
 });
 
 app.post('/api/analytics/identify', (req, res) => {
     const { userId, username, globalName } = req.body;
-    // Log identification for analytics
     analytics.trackEvent('identify', { userId, username, globalName });
     res.json({ success: true });
 });
