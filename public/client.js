@@ -140,6 +140,7 @@ class FarkleClient {
 
             try { this.initListeners(); } catch (e) { console.error("Listeners Init Failed", e); }
             try { this.initSettings(); } catch (e) { console.error("Settings Init Failed", e); }
+            try { this.createBackgroundEffects(); } catch (e) { console.error("Background Effects Failed", e); }
             try { this.initHistory(); } catch (e) { console.error("History Init Failed", e); }
 
             // Create debug panel
@@ -439,9 +440,10 @@ class FarkleClient {
     }
 
     toggleMute() {
-        const isMuted = !this.sounds.enabled;
-        this.sounds.enabled = !isMuted;
+        const newState = !this.sounds.enabled;
+        this.sounds.setEnabled(newState);
 
+        const isMuted = !newState;
         const muteBtns = [this.ui.muteBtn, document.getElementById('quick-mute-btn')];
         muteBtns.forEach(btn => {
             if (btn) btn.classList.toggle('muted', isMuted);
@@ -468,17 +470,41 @@ class FarkleClient {
 
         this.initStatsUI();
 
-        // Felt Color
-        const themeBtns = document.querySelectorAll('.theme-btn');
-        themeBtns.forEach(btn => {
+        // Felt Color (Table)
+        const feltBtnGroup = document.querySelectorAll('.theme-options .theme-btn[data-theme]');
+        feltBtnGroup.forEach(btn => {
             btn.addEventListener('click', () => {
                 const theme = btn.dataset.theme;
-                let color = '#1a3a2a'; // Muted dark green
-                if (theme === 'blue') color = '#1a2a4a'; // Muted navy
-                if (theme === 'red') color = '#4a1a1a'; // Muted burgundy
-                if (theme === 'purple') color = '#2a1a4a'; // Muted deep purple
+                let color = '#1a3a2a';
+                if (theme === 'blue') color = '#1a2a4a';
+                if (theme === 'red') color = '#4a1a1a';
+                if (theme === 'purple') color = '#2a1a4a';
                 document.body.style.background = color;
-                themeBtns.forEach(b => b.classList.toggle('active', b === btn));
+                feltBtnGroup.forEach(b => b.classList.toggle('active', b === btn));
+                this.sounds.play('select');
+            });
+        });
+
+        // Background Atmosphere
+        const bgBtnGroup = document.querySelectorAll('.theme-options .theme-btn[data-bg]');
+        const auroraContainer = document.querySelector('.aurora-container');
+        bgBtnGroup.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const bgType = btn.dataset.bg;
+                if (auroraContainer) {
+                    if (bgType === 'aurora-cyan') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(77, 234, 255, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(180, 77, 234, 0.3)');
+                    } else if (bgType === 'aurora-purple') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(180, 77, 234, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(77, 77, 255, 0.3)');
+                    } else if (bgType === 'cosmic-red') {
+                        document.documentElement.style.setProperty('--primary-glow', 'rgba(224, 90, 71, 0.3)');
+                        document.documentElement.style.setProperty('--accent-glow', 'rgba(234, 77, 180, 0.3)');
+                    }
+                }
+                bgBtnGroup.forEach(b => b.classList.toggle('active', b === btn));
+                localStorage.setItem('farkle-bg-theme', bgType);
                 this.sounds.play('select');
             });
         });
@@ -502,9 +528,12 @@ class FarkleClient {
         if (this.ui.volumeSlider) {
             this.ui.volumeSlider.addEventListener('input', (e) => {
                 const vol = parseFloat(e.target.value);
-                this.sounds.masterVolume = vol;
+                this.sounds.setVolume(vol);
                 localStorage.setItem('farkle_volume', vol);
                 this.updateVolumeIcon(vol);
+                // If it was muted by volume 0, and we slide up, but master toggle is OFF, 
+                // we should probably NOT unmute the master toggle unless the user explicitly clicks mute.
+                // But if they slide volume up from 0, it's expected to hear something IF enabled.
             });
         }
 
@@ -526,9 +555,15 @@ class FarkleClient {
             this.updateVolumeIcon(vol);
         }
 
+        const savedBg = localStorage.getItem('farkle-bg-theme');
+        if (savedBg) {
+            const targetBtn = Array.from(bgBtnGroup).find(b => b.dataset.bg === savedBg);
+            if (targetBtn) targetBtn.click();
+        }
+
         const savedMuted = localStorage.getItem('farkle_muted') === 'true';
         if (savedMuted) {
-            this.sounds.enabled = false;
+            this.sounds.enabled = true; // Temporary set to true so toggleMute flips it to false
             this.toggleMute();
         }
     }
@@ -1566,6 +1601,39 @@ class FarkleClient {
         }, 5000);
     }
 
+    createBackgroundEffects() {
+        const container = document.getElementById('bg-dice-container');
+        if (!container) return;
+
+        // Create Stars
+        for (let i = 0; i < 50; i++) {
+            const star = document.createElement('div');
+            star.className = 'bg-particle';
+            const size = Math.random() * 3 + 1;
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            star.style.left = `${Math.random() * 100}%`;
+            star.style.top = `${Math.random() * 100}%`;
+            star.style.animationDelay = `${Math.random() * 5}s`;
+            star.style.animationDuration = `${Math.random() * 3 + 2}s`;
+            container.appendChild(star);
+        }
+
+        // Create Floating Dice Outlines
+        const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        for (let i = 0; i < 15; i++) {
+            const die = document.createElement('div');
+            die.className = 'bg-die';
+            die.textContent = diceChars[Math.floor(Math.random() * diceChars.length)];
+            die.style.left = `${Math.random() * 100}%`;
+            die.style.fontSize = `${Math.random() * 20 + 20}px`;
+            die.style.animationDuration = `${Math.random() * 10 + 10}s`;
+            die.style.animationDelay = `${Math.random() * 10}s`;
+            die.style.opacity = (Math.random() * 0.1 + 0.05).toString();
+            container.appendChild(die);
+        }
+    }
+
     createDebugPanel() {
         // Remove existing if any
         const existing = document.getElementById('debug-panel');
@@ -1649,28 +1717,43 @@ class SoundManager {
     }
 
     async setupReverb() {
-        if (!this.ctx || !this.masterGain) return;
+        if (!this.ctx) return;
         this.reverbNode = this.ctx.createConvolver();
-
-        const length = this.ctx.sampleRate * 1.5;
-        const impulse = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+        const length = this.ctx.sampleRate * 2.0;
+        const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
         for (let i = 0; i < 2; i++) {
-            const channel = impulse.getChannelData(i);
+            const data = buffer.getChannelData(i);
             for (let j = 0; j < length; j++) {
-                channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 3);
+                data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 2.0);
             }
         }
-        this.reverbNode.buffer = impulse;
-
+        this.reverbNode.buffer = buffer;
         const reverbGain = this.ctx.createGain();
-        reverbGain.gain.value = 0.2; // Optimized mix
+        reverbGain.gain.value = 0.3;
         this.reverbNode.connect(reverbGain);
         reverbGain.connect(this.masterGain);
+    }
+
+    updateGain() {
+        if (!this.ctx || !this.masterGain) return;
+        const target = this.enabled ? this.masterVolume : 0;
+        this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+    }
+
+    setVolume(vol) {
+        this.masterVolume = vol;
+        this.updateGain();
+    }
+
+    setEnabled(enabled) {
+        this.enabled = enabled;
+        this.updateGain();
     }
 
     play(name) {
         if (!this.enabled || !this.ctx) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
+        this.updateGain(); // Ensure gain is synced before playing
 
         const now = this.ctx.currentTime;
 
@@ -1799,15 +1882,12 @@ class SoundManager {
 
     connectToMaster(node) {
         if (!this.ctx || !this.masterGain) return;
-        if (this.masterGain.gain.value !== this.masterVolume) {
-            this.masterGain.gain.setTargetAtTime(this.enabled ? this.masterVolume : 0, this.ctx.currentTime, 0.05);
-        }
         node.connect(this.masterGain);
         if (this.reverbNode) node.connect(this.reverbNode);
     }
 
     toggle() {
-        this.enabled = !this.enabled;
+        this.setEnabled(!this.enabled);
         return this.enabled;
     }
 }
