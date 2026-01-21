@@ -705,6 +705,14 @@ io.on('connection', (socket) => {
 
                     socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
                     io.to(roomCode).emit('game_state_update', game.getState());
+
+                    // Auto-start check on reconnect
+                    if (game.gameStatus === 'waiting' && game.players.filter(p => p.connected).length >= 2) {
+                        console.log(`[Game ${roomCode}] Auto-start triggered on reconnect.`);
+                        game.start();
+                        io.to(roomCode).emit('game_start', game.getState());
+                        io.emit('room_list', getRoomList());
+                    }
                     return;
                 }
             }
@@ -732,6 +740,14 @@ io.on('connection', (socket) => {
 
                         socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
                         io.to(roomCode).emit('game_state_update', game.getState());
+
+                        // Auto-start check on global reconnect
+                        if (game.gameStatus === 'waiting' && game.players.filter(p => p.connected).length >= 2) {
+                            console.log(`[Game ${roomCode}] Auto-start triggered on global reconnect.`);
+                            game.start();
+                            io.to(roomCode).emit('game_start', game.getState());
+                            io.emit('room_list', getRoomList());
+                        }
                         return;
                     }
                 }
@@ -747,6 +763,14 @@ io.on('connection', (socket) => {
                 socket.join(roomCode);
                 socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
                 io.to(roomCode).emit('game_state_update', game.getState());
+
+                // Auto-start check on ID-based rejoin
+                if (game.gameStatus === 'waiting' && game.players.filter(p => p.connected).length >= 2) {
+                    console.log(`[Game ${roomCode}] Auto-start triggered on local rejoin.`);
+                    game.start();
+                    io.to(roomCode).emit('game_start', game.getState());
+                    io.emit('room_list', getRoomList());
+                }
                 return;
             }
 
@@ -788,9 +812,11 @@ io.on('connection', (socket) => {
             io.to(roomCode).emit('game_state_update', game.getState());
             io.emit('room_list', getRoomList());
 
-            if (game.gameStatus === 'waiting' && game.players.length >= 2) {
+            if (game.gameStatus === 'waiting' && game.players.filter(p => p.connected).length >= 2) {
+                console.log(`[Game ${roomCode}] Auto-start threshold reached (2+ connected). Starting...`);
                 game.start();
                 io.to(roomCode).emit('game_start', game.getState());
+                io.emit('room_list', getRoomList());
             }
         } catch (err) {
             console.error("Error in join_game:", err);

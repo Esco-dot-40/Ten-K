@@ -1381,6 +1381,7 @@ class FarkleClient {
             const startBtn = this.ui.startGameBtn;
             if (startBtn) {
                 startBtn.style.display = 'block';
+                startBtn.textContent = 'START GAME'; // Ensure text is set
                 if (this.gameState.players.length >= 2) {
                     startBtn.disabled = false;
                     startBtn.classList.add('pulse');
@@ -1389,6 +1390,7 @@ class FarkleClient {
                     startBtn.disabled = true;
                     startBtn.classList.remove('pulse');
                     this.ui.actionText.textContent = `Need ${2 - this.gameState.players.length} more`;
+                    this.ui.currentScoreDisplay.textContent = "Waiting for players...";
                 }
             }
             return;
