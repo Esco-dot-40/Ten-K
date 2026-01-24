@@ -152,7 +152,7 @@ app.get('/api/access/auth/discord', (req, res) => {
 
     const scope = encodeURIComponent('identify guilds');
     const url = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
-    console.log(`[AUTH-DEBUG] Initiating login | Host: ${host} | Protocol: ${protocol} | Generated URI: ${redirectUri}`);
+    console.log(`[AUTH-DEBUG] Initiating login | Host: ${host} | ID: ${clientId} | Generated URI: ${redirectUri}`);
     res.redirect(url);
 });
 
