@@ -131,7 +131,7 @@ app.post('/api/token', async (req, res) => {
 
 // Web Discord Auth Routes
 app.get('/api/access/auth/discord', (req, res) => {
-    const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
+    const clientId = process.env.DISCORD_CLIENT_ID || '1455588853254713404';
 
     // Priority Detection for Redirect URI: Use environment variable if available, 
     // otherwise reconstruct from the current request to ensure it matches the domain the user is on.
@@ -161,7 +161,7 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
     if (!code) return res.send("Auth failed: No code");
 
     const secret = process.env.DISCORD_CLIENT_SECRET || process.env.DISCORD_SECRET;
-    const clientId = process.env.DISCORD_CLIENT_ID || '1455067365694771364';
+    const clientId = process.env.DISCORD_CLIENT_ID || '1455588853254713404';
 
     const host = req.get('x-forwarded-host') || req.get('host') || '';
     let protocol = req.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
