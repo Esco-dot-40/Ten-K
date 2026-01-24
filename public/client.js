@@ -9,7 +9,7 @@ import { calculateScore, isScoringSelection } from "./rules.js";
 // Discord SDK integration refactored to use dynamic import
 
 // Global reference
-const DISCORD_CLIENT_ID = "1455588853254713404"; // Updated from user screenshot match
+const DISCORD_CLIENT_ID = "1455588853254717510"; // Corrected ID from user
 
 
 class FarkleClient {
