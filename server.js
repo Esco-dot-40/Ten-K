@@ -304,7 +304,9 @@ class GameState {
             hasOpened: false,
             reconnectToken: reconnectToken || null,
             missedTurns: 0,
-            dbId: dbId || null
+            dbId: dbId || null,
+            farkles: 0,
+            maxRoundScore: 0
         });
         return true;
     }
@@ -529,6 +531,7 @@ class GameState {
 
         this.roundAccumulatedScore = potentialTotal;
         player.score += this.roundAccumulatedScore;
+        player.maxRoundScore = Math.max(player.maxRoundScore || 0, this.roundAccumulatedScore);
         player.hasOpened = true;
         this.farkleCount = 0;
         const remainingDiceCount = this.currentDice ? (this.currentDice.length - selected.length) : 0;
@@ -553,6 +556,7 @@ class GameState {
 
         this.previousPlayerLeftoverDice = 0;
         this.roundAccumulatedScore = 0;
+        this.players[this.currentPlayerIndex].farkles++;
         this.nextTurn();
     }
 
@@ -604,7 +608,7 @@ class GameState {
             const isWin = (this.winner !== 'tie' && p.id === this.winner.id);
             try {
                 if (p.dbId) {
-                    await db.recordGameEnd(p.dbId, isWin, p.score, 0, p.farkles || 0);
+                    await db.recordGameEnd(p.dbId, isWin, p.score, p.maxRoundScore || 0, p.farkles || 0);
                 }
             } catch (e) { console.error("Stats Error:", e); }
         }

@@ -978,7 +978,12 @@ class FarkleClient {
             }
 
             if (this.roomCode) {
-                this.socket.emit('join_game', { roomCode: this.roomCode, reconnectToken: this.reconnectToken, name: this.playerName });
+                this.socket.emit('join_game', {
+                    roomCode: this.roomCode,
+                    reconnectToken: this.reconnectToken,
+                    name: this.playerName,
+                    dbId: this.discordId || null
+                });
             }
         });
 
