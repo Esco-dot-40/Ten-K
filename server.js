@@ -370,13 +370,14 @@ class GameState {
     }
 
     getCurrentPlayer() {
+        if (!this.players || this.players.length === 0) return null;
         return this.players[this.currentPlayerIndex];
     }
 
     roll(playerId, useHighStakes = false) {
         if (this.gameStatus !== 'playing' || this.locked) return { error: "Game not active or busy" };
         const player = this.getCurrentPlayer();
-        if (player.id !== playerId) return { error: "Not your turn" };
+        if (!player || player.id !== playerId) return { error: "Not your turn" };
 
         let scoreFromSelection = 0;
         let isFirstRollOfTurn = (this.currentDice.length === 0 && this.roundAccumulatedScore === 0);
@@ -498,7 +499,7 @@ class GameState {
     bank(playerId) {
         if (this.gameStatus !== 'playing' || this.locked) return;
         const player = this.players[this.currentPlayerIndex];
-        if (player.id !== playerId) return;
+        if (!player || player.id !== playerId) return;
 
         const selected = this.currentDice.filter(d => d.selected);
         const values = selected.map(d => d.value);
@@ -554,16 +555,19 @@ class GameState {
     }
 
     farkle() {
-        if (this.farkleCount >= 3) {
-            const penalty = this.rules.threeFarklesPenalty || 1000;
-            console.log(`[Game ${this.roomCode}] Player penalty for 3 farkles: -${penalty}`);
-            this.players[this.currentPlayerIndex].score -= penalty;
-            this.farkleCount = 0;
+        const player = this.players[this.currentPlayerIndex];
+        if (player) {
+            if (this.farkleCount >= 3) {
+                const penalty = this.rules.threeFarklesPenalty || 1000;
+                console.log(`[Game ${this.roomCode}] Player penalty for 3 farkles: -${penalty}`);
+                player.score -= penalty;
+                this.farkleCount = 0;
+            }
+            player.farkles++;
         }
 
         this.previousPlayerLeftoverDice = 0;
         this.roundAccumulatedScore = 0;
-        this.players[this.currentPlayerIndex].farkles++;
         this.nextTurn();
     }
 
@@ -573,6 +577,10 @@ class GameState {
             this.resetRound();
             return;
         }
+
+        let attempts = 0;
+        let p;
+        const resultLoopLimit = this.players.length + 10;
 
         do {
             this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
@@ -609,6 +617,10 @@ class GameState {
         this.gameStatus = 'finished';
 
         // Determine winner
+        if (this.players.length === 0) {
+            this.winner = null;
+            return;
+        }
         const sorted = [...this.players].sort((a, b) => b.score - a.score);
         this.winner = (sorted.length > 1 && sorted[0].score === sorted[1].score) ? 'tie' : sorted[0];
 
@@ -670,30 +682,35 @@ class GameState {
         const idleTime = (now - this.turnStartTime) / 1000;
         const player = this.players[this.currentPlayerIndex];
 
+        if (!player) return;
+
         // 60s Reminder
         if (idleTime >= 60 && !this.reminded) {
             this.reminded = true;
-            if (player && player.connected) {
+            if (player.connected) {
                 io.to(player.id).emit('turn_reminder');
                 console.log(`[Game ${this.roomCode}] Reminded ${player.name} to take turn.`);
             }
         }
 
-        // Auto-skip after 120s (User said afk > 1 min, but let's give buffer for reminder)
-        // User: "remind them its their turn after 60 seconds... any and all people who are afk for more than one minute"
-        // Let's interpret AFK > 1 min as "take action or we move on". 
-        // We'll give 60s for reminder, then if another 30s pass (90s total), we auto-skip.
+        // Auto-skip after 90s
         if (idleTime >= 90) {
-            console.log(`[Game ${this.roomCode}] Auto-skipping ${player.name} due to inactivity (90s).`);
+            const skipName = player.name;
+            console.log(`[Game ${this.roomCode}] Auto-skipping ${skipName} due to inactivity (90s).`);
             this.nextTurn();
+            io.to(this.roomCode).emit('chat_message', {
+                sender: "System",
+                message: `${skipName}'s turn was skipped due to inactivity.`,
+                isSystem: true
+            });
             io.to(this.roomCode).emit('game_state_update', this.getState());
         }
 
-        // Clean up disconnected players after 3 minutes (180s)
+        // Clean up disconnected players after 5 minutes (300s)
         for (let i = this.players.length - 1; i >= 0; i--) {
             const p = this.players[i];
-            if (!p.connected && p.disconnectTime && (now - p.disconnectTime) > 180000) {
-                console.log(`[Game ${this.roomCode}] Removing ${p.name} permanently (3 mins disconnected).`);
+            if (!p.connected && p.disconnectTime && (now - p.disconnectTime) > 300000) {
+                console.log(`[Game ${this.roomCode}] Removing ${p.name} permanently (5 mins disconnected).`);
 
                 const wasCurrent = (i === this.currentPlayerIndex);
                 this.players.splice(i, 1);
@@ -701,10 +718,13 @@ class GameState {
                 if (this.players.length === 0) {
                     this.gameStatus = 'waiting';
                     this.resetRound();
-                    io.emit('room_list', getRoomList());
-                } else if (wasCurrent) {
-                    this.currentPlayerIndex = this.currentPlayerIndex % this.players.length;
-                    this.nextTurn();
+                } else {
+                    if (wasCurrent) {
+                        this.currentPlayerIndex = this.currentPlayerIndex % this.players.length;
+                        this.nextTurn();
+                    } else if (i < this.currentPlayerIndex) {
+                        this.currentPlayerIndex--;
+                    }
                 }
 
                 io.to(this.roomCode).emit('game_state_update', this.getState());
@@ -791,7 +811,6 @@ io.on('connection', (socket) => {
                             io.to(roomCode).emit('game_state_update', game.getState());
                         }
                         return;
-                        return;
                     }
                 }
             }
@@ -809,7 +828,6 @@ io.on('connection', (socket) => {
                 if (!game.checkAutoStart(io)) {
                     io.to(roomCode).emit('game_state_update', game.getState());
                 }
-                return;
                 return;
             }
 
@@ -873,13 +891,14 @@ io.on('connection', (socket) => {
             const p = game.players.find(p => p.id === socket.id);
             if (p) {
                 p.connected = false;
+                p.disconnectTime = Date.now();
                 p.reconnectToken = null; // Clear token on explicit leave
                 if (game.gameStatus === 'waiting') {
                     game.players = game.players.filter(pl => pl.id !== socket.id);
                 }
                 const activeCount = game.players.filter(p => p.connected).length;
                 if (activeCount === 0) {
-                    // Grace period before wipe - increased to 45s
+                    // Grace period before wipe - increased to 120s
                     setTimeout(() => {
                         const currentG = games.get(game.roomCode);
                         if (currentG && currentG.players.filter(pl => pl.connected).length === 0) {
@@ -888,7 +907,7 @@ io.on('connection', (socket) => {
                             currentG.resetRound();
                             io.emit('room_list', getRoomList());
                         }
-                    }, 45000);
+                    }, 120000);
                 }
                 socket.leave(game.roomCode);
                 io.emit('room_list', getRoomList());
@@ -1059,7 +1078,7 @@ io.on('connection', (socket) => {
                 const type = game.votes.type;
                 io.to(roomCode).emit('chat_message', {
                     sender: "System",
-                    message: `Vote passed! Executing ${type}...`,
+                    message: `Vote passed! Executing ${type} (will reset scores)...`,
                     isSystem: true
                 });
 
@@ -1126,6 +1145,7 @@ io.on('connection', (socket) => {
                 player.disconnectTime = Date.now();
                 const activeCount = game.players.filter(p => p.connected).length;
                 if (activeCount === 0) {
+                    // Grace period before wipe - increased to 120s
                     setTimeout(() => {
                         const currentG = games.get(game.roomCode);
                         if (currentG && currentG.players.filter(pl => pl.connected).length === 0) {
@@ -1134,7 +1154,7 @@ io.on('connection', (socket) => {
                             currentG.resetRound();
                             io.emit('room_list', getRoomList());
                         }
-                    }, 45000);
+                    }, 120000);
                 }
                 io.emit('room_list', getRoomList());
                 if (game.gameStatus === 'waiting') {

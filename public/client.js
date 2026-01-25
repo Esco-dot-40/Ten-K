@@ -39,7 +39,6 @@ class FarkleClient {
 
             this.playerId = null;
             this.gameState = null;
-            this.gameState = null;
             this.discordSdk = null;
             // Load preserved name or default
             const storedName = localStorage.getItem('farkle-username');
@@ -789,8 +788,10 @@ class FarkleClient {
         }
         this.debugLog("Connecting to Socket...");
         this.socket = io({
-            reconnectionAttempts: 10,
-            auth: { name: this.playerName }
+            reconnectionAttempts: 25,
+            transports: ['websocket'],
+            auth: { name: this.playerName },
+            timeout: 10000
         });
         this.initSocketEvents();
     }
@@ -999,6 +1000,9 @@ class FarkleClient {
         this.socket.on('disconnect', (reason) => {
             this.debugLog(`Disconnected: ${reason}`);
             this.showFeedback("Connection Lost! Reconnecting...", "error");
+            if (reason === 'io server disconnect') {
+                this.socket.connect();
+            }
         });
 
         this.socket.on('joined', ({ playerId, state, isSpectator }) => {
@@ -1374,8 +1378,7 @@ class FarkleClient {
             this.ui.bankBtn.style.display = 'none';
             const hsBtn = document.getElementById('hs-roll-btn');
             if (hsBtn) hsBtn.style.display = 'none';
-            const startBtn = document.getElementById('lobby-start-btn');
-            if (startBtn) startBtn.style.display = 'none';
+            if (this.ui.startGameBtn) this.ui.startGameBtn.style.display = 'none';
 
             const currentPlayerName = this.gameState.players[this.gameState.currentPlayerIndex]?.name || "Someone";
             this.ui.actionText.textContent = `Spectating. Current Turn: ${currentPlayerName}`;
@@ -1480,8 +1483,7 @@ class FarkleClient {
             }
         }
 
-        const startBtn = document.getElementById('lobby-start-btn');
-        if (startBtn) startBtn.style.display = 'none';
+        if (this.ui.startGameBtn) this.ui.startGameBtn.style.display = 'none';
 
         this.ui.rollBtn.style.display = 'inline-block';
         this.ui.bankBtn.style.display = 'inline-block';
