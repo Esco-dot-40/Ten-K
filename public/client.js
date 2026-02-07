@@ -97,6 +97,7 @@ class FarkleClient {
                 volumeIcon: document.getElementById('volume-icon'),
                 statsModal: document.getElementById('stats-modal'),
                 statsContent: document.getElementById('stats-content'),
+                statsBtn: document.getElementById('stats-btn'), // Added missing reference
                 webAuthSection: document.getElementById('web-auth-section'),
                 discordLoginBtn: document.getElementById('discord-login-btn'),
                 guestLoginBtn: document.getElementById('guest-login-btn')
