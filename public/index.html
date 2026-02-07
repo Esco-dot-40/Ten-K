@@ -346,19 +346,38 @@
                     style="min-width: 60px; height: 40px; font-size: 0.9rem; padding: 0 15px;">Send</button>
             </div>
         </div>
+
+        <!-- Hardware Acceleration Notice Modal -->
+        <div id="hw-accel-modal" class="modal" style="z-index: 100001;">
+            <div class="modal-content" style="max-width: 500px; text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">⚡</div>
+                <h2 style="color: var(--primary); margin-bottom: 1rem;">Performance Notice</h2>
+                <p style="color: var(--text); font-size: 1.1rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                    If the game is lagging/buggy/running badly, please turn <strong
+                        style="color: var(--primary);">hardware acceleration on</strong> for the best experience.
+                </p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">
+                    You can enable this in your browser settings for optimal performance.
+                </p>
+                <button class="btn primary"
+                    onclick="document.getElementById('hw-accel-modal').classList.add('hidden'); localStorage.setItem('hw-accel-notice-seen', 'true');">Got
+                    It!</button>
+            </div>
+        </div>
+
         <footer
             style="text-align: center; padding: 0.5rem; color: var(--text-muted); font-size: 0.7rem; flex-shrink: 0;">
             <p>
                 <a href="privacy.html" style="color: var(--text-muted); text-decoration: none;">Privacy Policy</a> |
-                <a href="terms.html" style="color: var(--text-muted); text-decoration: none;">Terms of Service</a>
+                <a href="terms.html" style="color: var(--text-muted); text-decoration: none;">Terms of Service</a> |
+                <a href="bug-report.html" style="color: var(--text-muted); text-decoration: none;">🐛 Report a Bug</a>
             </p>
         </footer>
     </div>
 
-    <!-- iOS Style Chat Notifications Container -->
     <div id="chat-notifications" class="chat-notifications-container"></div>
 
-    <script type="module" src="client.js"></script>
+    <script type="module" src="client.js?v=2.1"></script>
 </body>
 
 </html>

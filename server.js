@@ -223,6 +223,31 @@ app.post('/api/analytics/identify', (req, res) => {
     res.json({ success: true });
 });
 
+// Bug Report Endpoint
+app.post('/api/bug-report', async (req, res) => {
+    const { username, userId, problem, description, reproduction, severity, timestamp, userAgent } = req.body;
+
+    try {
+        // Log the bug report (you can also store it in the database)
+        console.log('[BUG REPORT]', {
+            username,
+            userId,
+            problem,
+            severity,
+            timestamp: new Date(timestamp).toISOString()
+        });
+
+        // Store in database if you have a bug_reports table
+        // await db.createBugReport({ username, userId, problem, description, reproduction, severity, timestamp, userAgent });
+
+        // For now, just acknowledge receipt
+        res.json({ success: true, message: 'Bug report received' });
+    } catch (error) {
+        console.error('Error processing bug report:', error);
+        res.status(500).json({ success: false, error: 'Failed to submit bug report' });
+    }
+});
+
 class GameState {
     constructor(roomCode, rules = DEFAULT_RULES) {
         this.roomCode = roomCode;
@@ -1270,12 +1295,7 @@ app.get('/api/stats/:id', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/leaderboard', async (req, res) => {
-    try {
-        const board = await db.getLeaderboard();
-        res.json(board);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// app.get('/api/leaderboard') removed in favor of /api/stats/leaderboard defined earlier
 
 // --- Game Loop ---
 setInterval(() => {
