@@ -1033,16 +1033,7 @@ class FarkleClient {
             if (this.ui.leaveBtn) this.ui.leaveBtn.style.width = 'auto';
             if (this.ui.leaveBtn) this.ui.leaveBtn.style.padding = '0 12px';
 
-            // Show hardware acceleration notice if not seen before
-            const hwAccelSeen = localStorage.getItem('hw-accel-notice-seen');
-            if (!hwAccelSeen) {
-                const hwAccelModal = document.getElementById('hw-accel-modal');
-                if (hwAccelModal) {
-                    setTimeout(() => {
-                        hwAccelModal.classList.remove('hidden');
-                    }, 1000);
-                }
-            }
+
         });
 
         this.socket.on('game_state_update', (state) => {
@@ -1432,10 +1423,10 @@ class FarkleClient {
         }
 
         // --- Game Actions Panel (formerly Debug) ---
-        let debugPanel = document.getElementById('debug-panel');
+        let debugPanel = document.getElementById('game-controls-panel');
         if (!debugPanel && this.ui.bankBtn.parentElement && this.ui.bankBtn.parentElement.parentElement) {
             debugPanel = document.createElement('div');
-            debugPanel.id = 'debug-panel';
+            debugPanel.id = 'game-controls-panel';
             debugPanel.className = 'tools-panel';
 
             const forceBtn = document.createElement('button');
@@ -1797,47 +1788,8 @@ class FarkleClient {
     }
 
     createDebugPanel() {
-        try {
-            // Remove existing if any
-            const existing = document.getElementById('debug-panel');
-            if (existing) existing.remove();
-
-            if (!document.body) {
-                console.warn('Document body not ready for debug panel');
-                return;
-            }
-
-            const panel = document.createElement('div');
-            panel.id = 'debug-panel';
-            panel.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: rgba(10, 10, 15, 0.7);
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
-                color: #00f2ff;
-                font-family: 'Outfit', 'Inter', sans-serif;
-                font-size: 10px;
-                letter-spacing: 0.5px;
-                padding: 8px 12px;
-                border-radius: 8px;
-                max-width: 240px;
-                max-height: 120px;
-                overflow: hidden;
-                z-index: 10000;
-                border: 1px solid rgba(0, 242, 255, 0.2);
-                box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 10px rgba(0, 242, 255, 0.1);
-                pointer-events: none;
-                transition: all 0.3s ease;
-                text-transform: uppercase;
-            `;
-            document.body.appendChild(panel);
-            this.debugPanel = panel;
-        } catch (e) {
-            console.error('Failed to create debug panel:', e);
-            this.debugPanel = null;
-        }
+        // Disabled to prevent "Performance Notice" overlay
+        this.debugPanel = null;
     }
 
     addDebugMessage(msg) {
