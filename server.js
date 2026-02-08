@@ -318,10 +318,19 @@ class GameState {
 
     addPlayer(id, name, reconnectToken, dbId) {
         if (this.players.length >= 10) return false;
+
+        // Find first available seat
+        const takenSeats = new Set(this.players.map(p => p.seat));
+        let seat = 0;
+        while (takenSeats.has(seat)) {
+            seat++;
+        }
+
         // Assign host if first player (or if host left and this is first new joiner, though logic handles host migration on leave)
         if (this.players.length === 0) {
             this.hostId = id;
         }
+
         this.players.push({
             id,
             name,
@@ -333,9 +342,32 @@ class GameState {
             missedTurns: 0,
             dbId: dbId || null,
             farkles: 0,
-            maxRoundScore: 0
+            maxRoundScore: 0,
+            seat: seat // Assign seat
         });
+
+        // Keep players sorted by seat for consistent turn order
+        this.players.sort((a, b) => a.seat - b.seat);
+
         return true;
+    }
+
+    // ... (addSpectator, removePlayer unchanged)
+
+    switchSeat(playerId, targetSeat) {
+        if (this.gameStatus !== 'waiting') return { error: "Game already in progress" };
+
+        const player = this.players.find(p => p.id === playerId);
+        if (!player) return { error: "Player not found" };
+
+        if (targetSeat < 0 || targetSeat >= 10) return { error: "Invalid seat" };
+
+        const targetTaken = this.players.find(p => p.seat === targetSeat);
+        if (targetTaken) return { error: "Seat taken" };
+
+        player.seat = targetSeat;
+        this.players.sort((a, b) => a.seat - b.seat);
+        return { success: true };
     }
 
     addSpectator(id) {
@@ -902,6 +934,19 @@ io.on('connection', (socket) => {
         } catch (err) {
             console.error("Error in join_game:", err);
             socket.emit('error', "Server Error");
+        }
+    });
+
+    socket.on('switch_seat', (data) => {
+        const game = Array.from(games.values()).find(g => g.players.some(p => p.id === socket.id));
+        if (game) {
+            const { seatIndex } = data;
+            const res = game.switchSeat(socket.id, seatIndex);
+            if (res && res.error) {
+                socket.emit('feedback', { message: res.error, type: 'error' });
+            } else {
+                io.to(game.roomCode).emit('game_state_update', game.getState());
+            }
         }
     });
 

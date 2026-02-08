@@ -1292,37 +1292,83 @@ class FarkleClient {
         const container = this.ui.playerZonesContainer;
         if (!container) return;
 
+        // Ensure container has CSS grid/flex setup for seats
+        container.classList.add('seated-layout');
+
+        // Render 10 Seats
+        const MAX_SEATS = 10;
+        const currentSeats = Array.from(container.children);
+
+        // Sync children count
+        while (container.children.length < MAX_SEATS) {
+            const seatEl = document.createElement('div');
+            seatEl.className = 'player-seat';
+            container.appendChild(seatEl);
+        }
+
         const players = this.gameState.players;
-        // Efficient rendering: sync child count
-        while (container.children.length < players.length) {
-            const card = document.createElement('div');
-            card.className = 'player-card';
-            const nameEl = document.createElement('div');
-            nameEl.className = 'player-info';
-            const scoreEl = document.createElement('div');
-            scoreEl.className = 'total-score';
-            card.appendChild(nameEl);
-            card.appendChild(scoreEl);
-            container.appendChild(card);
+        const myPlayer = players.find(p => p.id === this.socket.id);
+        const canSwitch = this.gameState.gameStatus === 'waiting' && !this.isSpectator;
+
+        for (let i = 0; i < MAX_SEATS; i++) {
+            const seatEl = container.children[i];
+            const player = players.find(p => p.seat === i);
+
+            seatEl.innerHTML = '';
+            seatEl.className = 'player-seat'; // Reset base class
+
+            if (player) {
+                // RENDER PLAYER CARD
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                if (this.gameState.currentPlayerIndex !== -1 && players[this.gameState.currentPlayerIndex] && players[this.gameState.currentPlayerIndex].id === player.id) {
+                    card.classList.add('active');
+                }
+
+                // Content
+                const info = document.createElement('div');
+                info.className = 'player-info';
+                info.textContent = player.name + (player.id === this.socket.id ? ' (You)' : '');
+
+                const score = document.createElement('div');
+                score.className = 'total-score';
+                score.textContent = player.score.toLocaleString();
+
+                card.appendChild(info);
+                card.appendChild(score);
+
+                // Host Badge
+                if (this.gameState.hostId === player.id) {
+                    const hostBadge = document.createElement('span');
+                    hostBadge.className = 'host-badge';
+                    hostBadge.textContent = 'HOST';
+                    card.appendChild(hostBadge);
+                }
+
+                seatEl.appendChild(card);
+                seatEl.classList.add('occupied');
+
+            } else {
+                // EMPTY SEAT
+                seatEl.classList.add('empty');
+
+                if (canSwitch) {
+                    const sitBtn = document.createElement('button');
+                    sitBtn.className = 'sit-btn';
+                    sitBtn.textContent = 'Sit Here';
+                    sitBtn.onclick = () => {
+                        this.socket.emit('switch_seat', { seatIndex: i });
+                        this.sounds.play('click');
+                    };
+                    seatEl.appendChild(sitBtn);
+                } else {
+                    // Just visual empty seat
+                    const ghost = document.createElement('div');
+                    ghost.className = 'seat-ghost';
+                    seatEl.appendChild(ghost);
+                }
+            }
         }
-        while (container.children.length > players.length) {
-            container.removeChild(container.lastChild);
-        }
-
-        players.forEach((player, index) => {
-            const card = container.children[index];
-            const isCurrent = this.gameState.currentPlayerIndex === index && this.gameState.gameStatus === 'playing';
-
-            const nameEl = card.querySelector('.player-info');
-            const scoreEl = card.querySelector('.total-score');
-
-            if (nameEl.textContent !== player.name) nameEl.textContent = player.name;
-            const formattedScore = (player.score || 0).toLocaleString();
-            if (scoreEl.textContent !== formattedScore) scoreEl.textContent = formattedScore;
-
-            card.classList.toggle('active', isCurrent);
-            card.style.opacity = player.connected ? "1" : "0.5";
-        });
     }
 
     renderDice(dice) {

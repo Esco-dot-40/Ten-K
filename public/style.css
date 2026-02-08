@@ -459,19 +459,129 @@ body {
 }
 
 /* --- Player Zones --- */
+/* --- Player Zones (Seated Layout) --- */
 .player-zones {
     display: flex;
     justify-content: center;
-    gap: 0.75rem;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding: 0.5rem;
+    gap: 1rem;
     width: 100%;
-    scrollbar-width: none;
-    /* Firefox */
-    -ms-overflow-style: none;
-    /* IE 10+ */
-    flex-shrink: 0;
+    margin-bottom: 0;
+    z-index: 20;
+    transition: all 0.3s;
+    min-height: 100px;
+    /* Reserve space */
+}
+
+/* New Grid Layout for Seats */
+.player-zones.seated-layout {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    /* 5 cols */
+    grid-template-rows: repeat(2, 1fr);
+    /* 2 rows */
+    gap: 12px;
+    max-width: 1000px;
+    margin: 0 auto 1rem auto;
+}
+
+@media (max-width: 900px) {
+    .player-zones.seated-layout {
+        grid-template-columns: repeat(4, 1fr);
+        /* 4 cols on smaller screens */
+    }
+}
+
+@media (max-width: 600px) {
+    .player-zones.seated-layout {
+        grid-template-columns: repeat(2, 1fr);
+        /* 2 cols on mobile */
+    }
+}
+
+.player-seat {
+    position: relative;
+    min-width: 140px;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s;
+}
+
+/* Empty Seat Styling */
+.player-seat.empty {
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.player-seat.empty:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Sit Button */
+.sit-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+
+.sit-btn:hover {
+    color: var(--primary);
+    background: rgba(0, 242, 255, 0.05);
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+}
+
+.seat-ghost {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.1)' stroke-width='1'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") center/30px no-repeat;
+    opacity: 0.3;
+}
+
+/* Host Badge */
+.host-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #FFD700;
+    color: #000;
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    border: 1px solid #fff;
+    z-index: 5;
+}
+
+/* Occupied Seat Card Override */
+.player-seat.occupied .player-card {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+.player-seat.occupied {
+    /* Remove min-width constraints if card handles it */
+}
+
+/* Hide Player Zones when scrolling? No, keep essential. */
+/* Firefox */
+-ms-overflow-style: none;
+/* IE 10+ */
+flex-shrink: 0;
 }
 
 .player-zones::-webkit-scrollbar {
