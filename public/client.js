@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import * as CANNON from "cannon-es";
+import gsap from "gsap";
 import { calculateScore, isScoringSelection } from "./rules.js";
 
 
