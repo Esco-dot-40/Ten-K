@@ -394,6 +394,8 @@ class GameState {
         if (connectedCount >= 2) {
             this.gameStatus = 'playing';
             this.currentPlayerIndex = 0;
+            this.turnStartTime = Date.now(); // Reset AFK timer on start
+            this.reminded = false;
             this.resetRound();
             console.log(`[Game ${this.roomCode}] Started with ${connectedCount} players.`);
             return true;

@@ -112,6 +112,7 @@ class FarkleClient {
                 });
             }
 
+            this.announcer = new VirtualHost(this);
             this.dice3D = new Dice3DManager(this.ui.threeCanvasContainer, this);
             this.sounds = new SoundManager();
 
@@ -1033,7 +1034,14 @@ class FarkleClient {
             if (this.ui.leaveBtn) this.ui.leaveBtn.style.width = 'auto';
             if (this.ui.leaveBtn) this.ui.leaveBtn.style.padding = '0 12px';
 
+            // Fluent Board Entrance
+            gsap.from(".player-zones", { y: -20, opacity: 0, delay: 0.2, duration: 1, ease: "power3.out" });
+            gsap.from(".dice-arena", { scale: 0.95, opacity: 0, delay: 0.4, duration: 1.2, ease: "expo.out" });
+            gsap.from(".controls", { y: 50, opacity: 0, delay: 0.6, duration: 1, ease: "power2.out" });
 
+            if (this.announcer) {
+                setTimeout(() => this.announcer.show(`Welcome to Table ${this.roomCode}. High stakes today!`), 1000);
+            }
         });
 
         this.socket.on('game_state_update', (state) => {
@@ -1050,6 +1058,14 @@ class FarkleClient {
         this.socket.on('game_start', (state) => {
             this.updateGameState(state);
             this.showFeedback("Game Started!", "success");
+
+            // Fluent Startup Animation
+            gsap.from(".player-zones", { y: -30, opacity: 0, duration: 1.2, ease: "power4.out" });
+            gsap.from(".dice-arena", { y: 20, opacity: 0, duration: 1.8, ease: "power2.out" });
+
+            if (this.announcer) {
+                this.announcer.show("Cards up, dice out! The game has officially started.");
+            }
         });
 
         this.socket.on('roll_result', (data) => {
@@ -1057,15 +1073,40 @@ class FarkleClient {
             this.isRolling = true;
             if (this.ui.diceContainer) this.ui.diceContainer.classList.add('rolling');
 
+            // Quip on start
+            if (this.announcer) this.announcer.say('start');
+
+            // Camera Zoom In
+            if (this.dice3D) {
+                gsap.to(this.dice3D.camera, {
+                    zoom: 1.5,
+                    duration: 0.8,
+                    ease: "power2.out",
+                    onUpdate: () => this.dice3D.camera.updateProjectionMatrix()
+                });
+            }
+
             this.dice3D.roll(diceValues).then(async () => {
                 if (this.ui.diceContainer) this.ui.diceContainer.classList.remove('rolling');
 
                 if (data.farkle) {
                     this.showFeedback("FARKLE!", "error");
                     this.sounds.play('farkle');
-                    // Buffer delay: maintain isRolling=true to catch incoming state updates in pendingState
+                    this.shakeScreen(5, 0.4); // Add immersion shake
+                    if (this.announcer) this.announcer.say('farkle');
+                    // Buffer delay
                     const delay = this.isSpeedMode ? 800 : 2000;
                     await new Promise(r => setTimeout(r, delay));
+                }
+
+                // Camera Zoom Out
+                if (this.dice3D) {
+                    gsap.to(this.dice3D.camera, {
+                        zoom: 1.0,
+                        duration: 1.2,
+                        ease: "elastic.out(1, 0.5)",
+                        onUpdate: () => this.dice3D.camera.updateProjectionMatrix()
+                    });
                 }
 
                 this.isRolling = false;
@@ -1077,6 +1118,9 @@ class FarkleClient {
                 if (data.hotDice) {
                     this.showFeedback("HOT DICE!", "hot-dice");
                     this.sounds.play('hot_dice');
+                    if (this.announcer) this.announcer.say('hot_dice');
+                } else if (!data.farkle) {
+                    // Possible commentary on bank? No, that's handled in bank response
                 }
             });
         });
@@ -1292,12 +1336,12 @@ class FarkleClient {
         const container = this.ui.playerZonesContainer;
         if (!container) return;
 
-        // Ensure container has CSS grid/flex setup for seats
         container.classList.add('seated-layout');
 
         // Render 10 Seats
         const MAX_SEATS = 10;
-        const currentSeats = Array.from(container.children);
+        const players = this.gameState.players;
+        const canSwitch = this.gameState.gameStatus === 'waiting' && !this.isSpectator;
 
         // Sync children count
         while (container.children.length < MAX_SEATS) {
@@ -1306,36 +1350,36 @@ class FarkleClient {
             container.appendChild(seatEl);
         }
 
-        const players = this.gameState.players;
-        const myPlayer = players.find(p => p.id === this.socket.id);
-        const canSwitch = this.gameState.gameStatus === 'waiting' && !this.isSpectator;
-
         for (let i = 0; i < MAX_SEATS; i++) {
             const seatEl = container.children[i];
             const player = players.find(p => p.seat === i);
 
             seatEl.innerHTML = '';
-            seatEl.className = 'player-seat'; // Reset base class
+            seatEl.className = 'player-seat';
 
             if (player) {
-                // RENDER PLAYER CARD
+                seatEl.classList.add('occupied');
                 const card = document.createElement('div');
                 card.className = 'player-card';
-                if (this.gameState.currentPlayerIndex !== -1 && players[this.gameState.currentPlayerIndex] && players[this.gameState.currentPlayerIndex].id === player.id) {
-                    card.classList.add('active');
-                }
 
-                // Content
-                const info = document.createElement('div');
-                info.className = 'player-info';
-                info.textContent = player.name + (player.id === this.socket.id ? ' (You)' : '');
+                const isCurrent = this.gameState.currentPlayerIndex !== -1 &&
+                    players[this.gameState.currentPlayerIndex] &&
+                    players[this.gameState.currentPlayerIndex].id === player.id;
 
-                const score = document.createElement('div');
-                score.className = 'total-score';
-                score.textContent = player.score.toLocaleString();
+                if (isCurrent) card.classList.add('active');
 
-                card.appendChild(info);
-                card.appendChild(score);
+                // Name
+                const nameEl = document.createElement('div');
+                nameEl.className = 'player-name';
+                nameEl.textContent = player.name + (player.id === this.socket.id ? ' (YOU)' : '');
+
+                // Score
+                const scoreEl = document.createElement('div');
+                scoreEl.className = 'player-score';
+                scoreEl.textContent = player.score.toLocaleString();
+
+                card.appendChild(nameEl);
+                card.appendChild(scoreEl);
 
                 // Host Badge
                 if (this.gameState.hostId === player.id) {
@@ -1346,23 +1390,18 @@ class FarkleClient {
                 }
 
                 seatEl.appendChild(card);
-                seatEl.classList.add('occupied');
-
             } else {
-                // EMPTY SEAT
                 seatEl.classList.add('empty');
-
                 if (canSwitch) {
                     const sitBtn = document.createElement('button');
                     sitBtn.className = 'sit-btn';
-                    sitBtn.textContent = 'Sit Here';
+                    sitBtn.textContent = 'SIT HERE';
                     sitBtn.onclick = () => {
                         this.socket.emit('switch_seat', { seatIndex: i });
                         this.sounds.play('click');
                     };
                     seatEl.appendChild(sitBtn);
                 } else {
-                    // Just visual empty seat
                     const ghost = document.createElement('div');
                     ghost.className = 'seat-ghost';
                     seatEl.appendChild(ghost);
@@ -1405,12 +1444,30 @@ class FarkleClient {
     }
 
     updateGameState(state) {
+        const oldState = this.gameState;
         this.gameState = state;
         this.rules = state.rules || {};
         this.renderPlayers();
         this.renderControls();
         this.renderDice(state.currentDice);
         this.checkGameOver(state);
+
+        // Turn change commentary
+        if (oldState && oldState.currentPlayerIndex !== state.currentPlayerIndex) {
+            const currentPlayer = state.players[state.currentPlayerIndex];
+            if (currentPlayer && currentPlayer.id === this.socket.id) {
+                if (this.announcer) this.announcer.say('turn_start');
+            }
+        }
+
+        // Bank commentary
+        if (oldState && state.gameStatus === 'playing') {
+            const oldCurrent = oldState.players[oldState.currentPlayerIndex];
+            const newPrev = state.players[oldState.currentPlayerIndex]; // The one who just finished
+            if (oldCurrent && newPrev && newPrev.score > oldCurrent.score) {
+                if (this.announcer) this.announcer.say('bank');
+            }
+        }
 
         if (this.gameState.gameStatus === 'playing') {
             const myPlayer = this.gameState.players.find(p => p.id === this.socket.id);
@@ -1633,8 +1690,12 @@ class FarkleClient {
             this.ui.gameOverModal.classList.remove('hidden');
             const winner = state.winner;
             let title = "";
-            if (winner === 'tie') title = "It's a Tie!";
-            else if (winner) title = `${winner.name} Wins!`;
+            if (winner === 'tie') {
+                title = "It's a Tie!";
+            } else if (winner) {
+                title = `${winner.name} Wins!`;
+                if (this.announcer) this.announcer.say('win');
+            }
             this.ui.winnerText.textContent = title;
 
             // Populate score board
@@ -1866,6 +1927,20 @@ class FarkleClient {
             console.error('Failed to add debug message:', e);
         }
     }
+
+    shakeScreen(intensity = 10, duration = 0.5) {
+        if (!this.ui.app) return;
+        gsap.to(this.ui.app, {
+            x: `random(-${intensity}, ${intensity})`,
+            y: `random(-${intensity}, ${intensity})`,
+            duration: 0.05,
+            repeat: Math.floor(duration / 0.05),
+            yoyo: true,
+            onComplete: () => {
+                gsap.set(this.ui.app, { x: 0, y: 0 });
+            }
+        });
+    }
 }
 
 class SoundManager {
@@ -2069,6 +2144,40 @@ class SoundManager {
     }
 }
 
+class VirtualHost {
+    constructor(client) {
+        this.client = client;
+        this.bubble = document.getElementById('host-bubble');
+        this.messageEl = document.getElementById('host-message');
+        this.quips = {
+            start: ["Place your bets!", "Good luck, you'll need it.", "Rolling for glory!", "Let's see what you've got."],
+            hot_dice: ["Hot dice! Keep 'em coming!", "You're on fire!", "Fantastic roll!", "UNBELIEVABLE!"],
+            farkle: ["OH NO! A FARKLE!", "Ouch, that's a cold roll.", "And just like that, it's gone.", "Better luck next time..."],
+            bank: ["Playing it safe, I see.", "Wise choice.", "Adding to the stash!", "A solid gain."],
+            turn_start: ["Your turn! Don't mess it up.", "Show them how it's done.", "Ready to roll?"],
+            win: ["WE HAVE A WINNER!", "Legendary performance!", "What a game!", "A new champion!"]
+        };
+        this.activeTimeout = null;
+    }
+
+    say(type) {
+        if (!this.quips[type]) return;
+        const list = this.quips[type];
+        const msg = list[Math.floor(Math.random() * list.length)];
+        this.show(msg);
+    }
+
+    show(text) {
+        if (!this.bubble || !this.messageEl) return;
+        if (this.activeTimeout) clearTimeout(this.activeTimeout);
+        this.messageEl.textContent = text;
+        this.bubble.classList.add('visible');
+        this.activeTimeout = setTimeout(() => {
+            this.bubble.classList.remove('visible');
+        }, 5000);
+    }
+}
+
 class Dice3DManager {
     constructor(container, client) {
         if (!container) return;
@@ -2083,9 +2192,41 @@ class Dice3DManager {
 
         // --- Cache System ---
         this.sharedGeometry = new RoundedBoxGeometry(2.2, 2.2, 2.2, 4, 0.4);
-        this.materialCache = new Map(); // Stores material arrays per color
+        this.materialCache = new Map();
 
         this.init();
+    }
+
+    generateFeltTexture(color) {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Fill base color
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, size, size);
+
+        // Add noise/texture
+        for (let i = 0; i < 50000; i++) {
+            const x = Math.random() * size;
+            const y = Math.random() * size;
+            const alpha = Math.random() * 0.05;
+            ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+            ctx.fillRect(x, y, 1, 1);
+        }
+
+        // Add spotlight center glow
+        const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.1)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        return tex;
     }
     setSpeed(isSpeed) {
         this.isSpeed = isSpeed;
@@ -2107,14 +2248,51 @@ class Dice3DManager {
         this.world.gravity.set(0, -200, 0);
         this.world.allowSleep = true;
 
-        // Floor
+        // --- ACTUAL TABLE MODEL ---
+        // Floor (The Felt)
         const floorMat = new CANNON.Material();
         const floorBody = new CANNON.Body({ mass: 0, material: floorMat });
         floorBody.addShape(new CANNON.Plane());
         floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
         this.world.addBody(floorBody);
 
-        // Walls
+        // Visual Table Base (The Wood)
+        const tableBaseGeom = new THREE.CylinderGeometry(15, 16, 2, 64);
+        const tableBaseMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a1a,
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const tableBase = new THREE.Mesh(tableBaseGeom, tableBaseMat);
+        tableBase.position.y = -1.1;
+        this.scene.add(tableBase);
+
+        // Visual Felt
+        const feltGeom = new THREE.CircleGeometry(14.8, 64);
+        this.feltMat = new THREE.MeshStandardMaterial({
+            color: 0x1a3a2a,
+            map: this.generateFeltTexture('#1a3a2a'),
+            roughness: 1,
+            metalness: 0
+        });
+        this.feltMesh = new THREE.Mesh(feltGeom, this.feltMat);
+        this.feltMesh.rotation.x = -Math.PI / 2;
+        this.feltMesh.position.y = 0.01;
+        this.scene.add(this.feltMesh);
+
+        // Decorative Rail
+        const railGeom = new THREE.TorusGeometry(15, 0.8, 16, 100);
+        const railMat = new THREE.MeshStandardMaterial({
+            color: 0x444444,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const rail = new THREE.Mesh(railGeom, railMat);
+        rail.rotation.x = Math.PI / 2;
+        rail.position.y = 0.5;
+        this.scene.add(rail);
+
+        // Walls (Physics)
         const wallMat = new CANNON.Material();
         const createWall = (x, z, rot) => {
             const body = new CANNON.Body({ mass: 0, material: wallMat });
@@ -2123,17 +2301,28 @@ class Dice3DManager {
             body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rot);
             this.world.addBody(body);
         };
-        createWall(12, 0, -Math.PI / 2); createWall(-12, 0, Math.PI / 2);
-        createWall(0, -12, 0); createWall(0, 12, Math.PI);
+        createWall(14, 0, -Math.PI / 2); createWall(-14, 0, Math.PI / 2);
+        createWall(0, -14, 0); createWall(0, 14, Math.PI);
 
         this.diceMat = new CANNON.Material();
         this.world.addContactMaterial(new CANNON.ContactMaterial(floorMat, this.diceMat, { friction: 0.2, restitution: 0.4 }));
         this.world.addContactMaterial(new CANNON.ContactMaterial(wallMat, this.diceMat, { friction: 0.1, restitution: 0.6 }));
 
-        this.scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-        const dir = new THREE.DirectionalLight(0xffffff, 0.5);
-        dir.position.set(10, 20, 10);
-        this.scene.add(dir);
+        // --- ENHANCED LIGHTING ---
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+        // Spotlights for dramatic table effect
+        this.spotLight = new THREE.SpotLight(0xffffff, 1.8);
+        this.spotLight.position.set(0, 35, 0);
+        this.spotLight.angle = Math.PI / 4.5;
+        this.spotLight.penumbra = 0.4;
+        this.spotLight.decay = 1.2;
+        this.spotLight.distance = 120;
+        this.scene.add(this.spotLight);
+
+        const fill = new THREE.DirectionalLight(0x4deaff, 0.4);
+        fill.position.set(25, 15, 25);
+        this.scene.add(fill);
 
         this.animate();
         window.addEventListener('resize', () => {
@@ -2282,6 +2471,11 @@ class Dice3DManager {
     }
     animate() {
         requestAnimationFrame(() => this.animate());
+
+        // Suble spotlight pulse for immersion
+        if (this.spotLight) {
+            this.spotLight.intensity = 1.6 + Math.sin(Date.now() * 0.0015) * 0.2;
+        }
 
         // Performance optimization: only render and simulate if running OR we need to render one final frame
         if (this.isRunning) {

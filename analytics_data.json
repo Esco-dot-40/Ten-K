@@ -1,3 +1,60 @@
 {
-  "hits": []
+  "hits": [
+    {
+      "id": "mledsl4wgkqnbn7izrf",
+      "timestamp": 1770593734400,
+      "path": "/",
+      "ip": "::1",
+      "sessionId": "session_1770593734400_0.kcu5dg5w4a",
+      "isReturning": false,
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "referrer": "Direct",
+      "geo": null,
+      "ua": {
+        "browser": {
+          "name": "Chrome",
+          "version": "144.0.0.0",
+          "major": "144"
+        },
+        "os": {
+          "name": "Windows",
+          "version": "10"
+        },
+        "device": {},
+        "engine": {
+          "name": "Blink",
+          "version": "144.0.0.0"
+        }
+      }
+    },
+    {
+      "id": "mledtxv4b3ae0m3z46o",
+      "timestamp": 1770593797552,
+      "path": "/",
+      "ip": "::1",
+      "sessionId": "session_1770593797552_0.wrbf1vr0svt",
+      "isReturning": true,
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "referrer": "Direct",
+      "geo": null,
+      "ua": {
+        "browser": {
+          "name": "Chrome",
+          "version": "144.0.0.0",
+          "major": "144"
+        },
+        "os": {
+          "name": "Windows",
+          "version": "10"
+        },
+        "device": {},
+        "engine": {
+          "name": "Blink",
+          "version": "144.0.0.0"
+        }
+      }
+    }
+  ]
 }
