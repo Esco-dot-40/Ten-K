@@ -28,10 +28,7 @@ app.use(async (req, res, next) => {
 app.post('/api/analytics/identify', (req, res) => {
     const { userId, username, globalName } = req.body;
     if (userId) {
-        // Here we could update the last analytics hit with this user info
-        // or just log an 'identify' event.
-        // For simplicity, we'll log it to console or extend analytics module later.
-        // console.log(`[Analytics] Identified User: ${globalName} (${username}) [${userId}]`);
+        analytics.trackEvent('identify', { userId, username, globalName });
     }
     res.json({ success: true });
 });
@@ -213,14 +210,6 @@ app.get('/api/access/auth/discord/callback', async (req, res) => {
         console.error("Web Auth Callback Error:", err);
         res.status(500).send(`Auth Failed: ${err.message}`);
     }
-});
-
-app.post('/api/analytics/identify', (req, res) => {
-    const { userId, username, globalName } = req.body;
-    if (userId) {
-        analytics.trackEvent('identify', { userId, username, globalName });
-    }
-    res.json({ success: true });
 });
 
 // Bug Report Endpoint
