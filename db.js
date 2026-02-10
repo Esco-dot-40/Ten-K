@@ -1,5 +1,4 @@
 import pg from 'pg';
-import Database from 'better-sqlite3';
 import 'dotenv/config';
 
 const { Pool } = pg;
@@ -9,6 +8,14 @@ const connectionString = process.env.DATABASE_URL;
 
 let pool = null;
 let sqliteDb = null;
+try {
+    const Database = (await import('better-sqlite3')).default;
+    sqliteDb = new Database('farkle.db');
+    sqliteDb.pragma('journal_mode = WAL');
+    console.log("SQLite loaded successfully.");
+} catch (e) {
+    console.warn("SQLite could not be loaded (likely missing build tools). Falling back to memory or Postgres only.");
+}
 let dbType = 'none'; // 'postgres', 'sqlite', 'none'
 
 const init = async () => {
@@ -35,16 +42,11 @@ const init = async () => {
     }
 
     // 2. Fallback to SQLite if Postgres failed or not provided
-    if (dbType !== 'postgres') {
-        try {
-            console.log("Switching to SQLite fallback...");
-            sqliteDb = new Database('farkle.db');
-            sqliteDb.pragma('journal_mode = WAL');
-            dbType = 'sqlite';
-            console.log("Connected to SQLite (farkle.db).");
-        } catch (e) {
-            console.error("SQLite initialization failed:", e);
-        }
+    if (dbType !== 'postgres' && sqliteDb) {
+        dbType = 'sqlite';
+        console.log("Using SQLite fallback.");
+    } else if (dbType !== 'postgres' && !sqliteDb) {
+        console.error("CRITICAL: No database available (Postgres failed and SQLite not loaded).");
     }
 
     // 3. Initialize Tables
