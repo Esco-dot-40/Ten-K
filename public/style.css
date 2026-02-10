@@ -1421,4 +1421,4 @@ body[data-dice-theme='dark'] .die {
 body[data-dice-theme='dark'] .pip {
     background: var(--primary);
     box-shadow: 0 0 5px var(--primary);
-}
+}/* sync-test: 2026-02-10-05-30 */
