@@ -2,6 +2,11 @@
  * SYNC VERIFIED: 2026-02-10 07:50
  * This comment proves the push is working.
  */
+console.log("------------------------------------------");
+console.log("🚀 SERVER STARTING UP...");
+console.log("Time:", new Date().toISOString());
+console.log("------------------------------------------");
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -17,7 +22,12 @@ const __dirname = dirname(__filename);
 
 const app = express();
 app.enable("trust proxy");
-app.use(express.json()); // Enable JSON body parsing for login
+app.use(express.json());
+
+// Health Check for Deployment Platforms
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
 // Middleware to track analytics
 app.use(async (req, res, next) => {
