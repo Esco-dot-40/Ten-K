@@ -480,28 +480,28 @@ body {
 
 .player-zones.seated-layout {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    grid-template-rows: auto;
-    /* dynamic rows */
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
     max-width: 1100px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
     .player-zones.seated-layout {
-        grid-template-columns: repeat(4, 1fr);
-    }
-}
-
-@media (max-width: 600px) {
-    .player-zones.seated-layout {
-        grid-template-columns: repeat(3, 1fr);
-        /* 3 cols = ~4 rows for 10 seats = shorter */
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     }
 
     .player-seat {
-        min-width: 80px;
-        /* Allow shrinking */
+        height: 70px;
+    }
+}
+
+@media (max-width: 480px) {
+    .player-zones.seated-layout {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .player-seat {
+        height: 60px;
     }
 }
 
@@ -1421,4 +1421,6 @@ body[data-dice-theme='dark'] .die {
 body[data-dice-theme='dark'] .pip {
     background: var(--primary);
     box-shadow: 0 0 5px var(--primary);
-}/* sync-test: 2026-02-10-05-30 */
+}
+
+/* sync-test: 2026-02-10-05-30 */

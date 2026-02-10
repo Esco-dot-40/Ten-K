@@ -142,8 +142,12 @@
 
                 <div class="virtual-host-container">
                     <div class="host-avatar">
-                        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=FarkleMaster&backgroundColor=b6e3f4"
-                            alt="Host">
+                        <!-- Replacement for broken DiceBear image with a local SVG -->
+                        <svg width="100%" height="100%" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="45" fill="#1a1a2a" stroke="#00f2ff" stroke-width="2" />
+                            <circle cx="50" cy="40" r="15" fill="#00f2ff" />
+                            <path d="M25,75 Q50,55 75,75" stroke="#00f2ff" stroke-width="4" fill="none" />
+                        </svg>
                     </div>
                     <div id="host-bubble" class="host-bubble">
                         <div class="host-name">Table Boss</div>
@@ -363,7 +367,7 @@
 
     <div id="chat-notifications" class="chat-notifications-container"></div>
 
-    <script type="module" src="client.js?v=2.4"></script>
+    <script type="module" src="client.js?v=2.5"></script>
 </body>
 
 </html>

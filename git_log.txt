@@ -1,0 +1,20 @@
+* 6a47ead (HEAD -> staging, origin/staging, origin/main, origin/live, origin/HEAD, main, live) Consolidate CSS, fix class naming mismatch, and bump version to v2.4
+* 14772ee Fix responsiveness for small screens and Discord mobile view
+* 0633c9e Fix GSAP ReferenceError by importing library
+* 738829e Enhance game interface and improved AFK logic
+* 259ea72 Implement seat selection and table layout
+* e858f43 Enhance dice arena with immersive table styling
+* f223902 Fix performance notice and ID conflict, bump version
+* 346f023 Refactor: Move login to header, default to guest
+* 7e88dbf Fix entry confirmation button: hide hw-accel modal by default
+* 0e26b15 fix: force client update and clean server routes
+* 9905f2e fix: correct stats modal content selector
+* 90a1c3f fix: add missing statsBtn UI reference
+* a79cb62 fix: enable stats UI and correct leaderboard endpoint
+* e6c82df feat: add sqlite fallback for local dev
+* 4c9c5a8 Fix severe server crashes and connection instability: fix nextTurn vars, endGame safety, increase room wipe timeout to 2min, and switch client to WebSocket transport.
+* 00439cc Fix room stability: Fix splice bug in AFK check, increase reset grace period to 45s, and add safety for empty players
+* 1dfe260 Implement AFK reminders, auto-skip (90s), and disconnected cleanup (3min)
+* 0c475c8 Fix game statistics: track farkles and max round score, ensure dbId is passed on reconnect
+* 64e1ab2 Correct Discord Client ID to 1455588853254717510
+* 87c7e6b Update hardcoded Discord Client ID to match user's production ID
