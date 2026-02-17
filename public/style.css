@@ -1423,4 +1423,212 @@ body[data-dice-theme='dark'] .pip {
     box-shadow: 0 0 5px var(--primary);
 }
 
-/* sync-test: 2026-02-10-05-30 */
+/* sync-test: 2026-02-17-02-45 */
+
+/* --- Mobile Optimization --- */
+@media (max-width: 600px) {
+    body {
+        height: 100svh;
+    }
+
+    .game-header {
+        padding: 0.4rem 0.6rem;
+        gap: 4px;
+    }
+
+    .logo-text {
+        font-size: 1.4rem !important;
+    }
+
+    .tagline {
+        display: none;
+    }
+
+    .icon-btn {
+        min-width: 34px;
+        height: 34px;
+        border-radius: 8px;
+    }
+
+    .icon-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .header-actions {
+        gap: 2px !important;
+    }
+
+    #leave-btn {
+        min-width: 38px !important;
+    }
+
+    #leave-text {
+        display: none !important;
+    }
+
+    .game-board {
+        padding: 0.25rem;
+        gap: 0.25rem;
+    }
+
+    #game-info-bar {
+        gap: 1rem !important;
+        margin-bottom: 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .player-zones {
+        padding: 0.4rem;
+        margin: 0.25rem 0;
+    }
+
+    .player-zones.seated-layout {
+        grid-template-columns: repeat(auto-fit, minmax(85px, 1fr)) !important;
+        gap: 4px;
+    }
+
+    .player-seat {
+        height: 55px !important;
+    }
+
+    .player-card {
+        padding: 0.4rem;
+    }
+
+    .player-name {
+        font-size: 0.7rem;
+        max-width: 80px;
+    }
+
+    .player-score {
+        font-size: 0.85rem;
+    }
+
+    .player-card.active::before {
+        top: -8px;
+        font-size: 0.5rem;
+        padding: 1px 6px;
+    }
+
+    .dice-arena {
+        min-height: 280px;
+    }
+
+    .virtual-host-container {
+        top: 10px;
+        right: 15px;
+        max-width: 180px;
+    }
+
+    .host-avatar {
+        width: 50px;
+        height: 50px;
+    }
+
+    .host-bubble {
+        padding: 0.6rem;
+        font-size: 0.75rem;
+        border-radius: 12px 0 12px 12px;
+    }
+
+    .dice-container {
+        gap: 0.75rem;
+        padding: 0.75rem;
+        max-width: 100%;
+        border-radius: 20px;
+        margin-bottom: 0.5rem;
+    }
+
+    .die {
+        width: 44px;
+        height: 44px;
+        border-radius: 6px;
+        padding: 4px;
+    }
+
+    .pip {
+        width: 6px;
+        height: 6px;
+    }
+
+    .die.selected {
+        transform: translateY(-10px) rotateX(10deg);
+    }
+
+    .feedback-message {
+        font-size: 3rem;
+    }
+
+    .feedback-message.error {
+        font-size: 3.5rem;
+    }
+
+    .controls {
+        padding: 0.75rem;
+        margin: 0.25rem;
+        gap: 0.5rem;
+        border-radius: 15px;
+    }
+
+    #current-score-display {
+        font-size: 1.1rem;
+    }
+
+    #action-text {
+        font-size: 0.8rem;
+    }
+
+    .button-group {
+        gap: 0.75rem;
+        width: 100%;
+    }
+
+    .btn {
+        flex: 1;
+        min-width: 0;
+        height: 44px;
+        font-size: 12px;
+    }
+
+    .modal-content {
+        padding: 1.5rem;
+        width: 95%;
+    }
+
+    .modal-content h2 {
+        font-size: 1.4rem;
+    }
+
+    .input-group {
+        margin-bottom: 1.2rem;
+    }
+
+    .room-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1rem;
+    }
+}
+
+@media (max-height: 600px) and (orientation: landscape) {
+    .game-header {
+        display: none;
+    }
+
+    .player-zones.seated-layout {
+        grid-template-columns: repeat(5, 1fr) !important;
+    }
+
+    .dice-arena {
+        min-height: 180px;
+    }
+
+    .controls {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+
+    .button-group {
+        width: auto;
+    }
+}

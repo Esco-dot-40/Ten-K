@@ -13,13 +13,20 @@ const DATA_FILE = path.join(__dirname, 'analytics_data.json');
 // In-memory storage
 let analyticsData = {
     hits: [],
+    blockedIPs: [],
+    blockedCountries: []
 };
 
 // Load data on startup
 try {
     if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf8');
-        analyticsData = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        analyticsData = {
+            hits: parsed.hits || [],
+            blockedIPs: parsed.blockedIPs || [],
+            blockedCountries: parsed.blockedCountries || []
+        };
     }
 } catch (e) {
     // Analytics load fail
@@ -35,121 +42,85 @@ setInterval(() => {
 }, 60000); // Every minute
 
 export const analytics = {
+    getIP: (req) => {
+        return (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    },
+
+    checkAllowed: async (req) => {
+        const ip = analytics.getIP(req);
+
+        // Block IPv6 localhost if preferred (optional)
+        if (analyticsData.blockedIPs.includes(ip)) return false;
+
+        // For Geolocation blocking, we need to know the country
+        // We can cache this in the request object to avoid double lookups
+        if (!req.geo) {
+            req.geo = await analytics.lookupGeo(ip);
+        }
+
+        if (req.geo && analyticsData.blockedCountries.includes(req.geo.countryCode)) {
+            console.log(`[FIREWALL] Blocked request from ${ip} (${req.geo.countryCode})`);
+            return false;
+        }
+
+        return true;
+    },
+
+    lookupGeo: async (ip) => {
+        if (ip === '::1' || ip === '127.0.0.1') return null;
+        try {
+            const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,query`);
+            const data = await response.json();
+            if (data.status === 'success') {
+                return {
+                    country: data.country,
+                    countryCode: data.countryCode,
+                    region: data.region,
+                    city: data.city,
+                    lat: data.lat,
+                    lon: data.lon,
+                    ll: [data.lat, data.lon],
+                    isp: data.isp,
+                    proxy: data.proxy || false
+                };
+            }
+        } catch (e) {
+            // fallback logic removed for simplicity as requested
+        }
+        return null;
+    },
+
     trackHit: async (req) => {
         try {
-            if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/libs') || req.path.includes('.')) {
-                if (req.path !== '/' && req.path !== '/index.html') return;
-            }
+            // Simplify: ignore internal assets
+            if (req.path.includes('.') && !req.path.endsWith('.html')) return;
+            if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return;
 
-            const ip = (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+            const ip = analytics.getIP(req);
             const uaString = req.headers['user-agent'];
             const uaParser = new UAParser(uaString);
 
-            // Use ip-api.com for accurate geolocation (free, no key, 45 req/min)
-            let geo = null;
-            try {
-                // ip-api.com works via HTTP by default for free tier
-                const geoResponse = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,query`);
-                const geoData = await geoResponse.json();
-
-                if (geoData.status === 'success') {
-                    geo = {
-                        country: geoData.country,
-                        countryCode: geoData.countryCode,
-                        region: geoData.region,
-                        regionName: geoData.regionName,
-                        city: geoData.city,
-                        zip: geoData.zip,
-                        lat: geoData.lat,
-                        lon: geoData.lon,
-                        ll: [geoData.lat, geoData.lon],
-                        timezone: geoData.timezone,
-                        isp: geoData.isp,
-                        org: geoData.org,
-                        as: geoData.as,
-                        proxy: geoData.proxy || false
-                    };
-                }
-            } catch (e) {
-                // geo lookup fallback
-                try {
-                    const fbResponse = await fetch(`https://ipapi.co/${ip}/json/`);
-                    const fbData = await fbResponse.json();
-                    if (!fbData.error) {
-                        geo = {
-                            country: fbData.country_name,
-                            countryCode: fbData.country_code,
-                            region: fbData.region_code,
-                            regionName: fbData.region,
-                            city: fbData.city,
-                            zip: fbData.postal,
-                            lat: fbData.latitude,
-                            lon: fbData.longitude,
-                            ll: [fbData.latitude, fbData.longitude],
-                            timezone: fbData.timezone,
-                            isp: fbData.org,
-                            org: fbData.org,
-                            as: fbData.asn,
-                            proxy: false // ipapi.co free doesn't easily show proxy in basic json
-                        };
-                    }
-                } catch (fbErr) {
-                    // silent fail
-                }
+            if (!req.geo) {
+                req.geo = await analytics.lookupGeo(ip);
             }
-
-            // Device type detection
-            const device = uaParser.getDevice();
-            let deviceType = 'Desktop';
-            if (device.type === 'mobile') deviceType = 'Mobile';
-            else if (device.type === 'tablet') deviceType = 'Tablet';
-
-            // Traffic source detection
-            const referrer = req.headers['referer'] || req.headers['referrer'] || 'Direct';
-            let trafficSource = 'Direct';
-            if (referrer !== 'Direct') {
-                try {
-                    const refUrl = new URL(referrer);
-                    trafficSource = refUrl.hostname;
-                } catch (e) {
-                    trafficSource = 'Unknown';
-                }
-            }
-
-            // Session tracking
-            const sessionId = req.headers['cookie']?.match(/farkle_session=([^;]+)/)?.[1] ||
-                `session_${Date.now()}_${Math.random().toString(36)}`;
-
-            // Check if returning visitor
-            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-            const isReturning = analyticsData.hits.some(h =>
-                h.ip === ip && h.timestamp > thirtyDaysAgo
-            );
 
             const hit = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2),
                 timestamp: Date.now(),
                 path: req.path,
                 ip: ip,
-                sessionId: sessionId,
-                isReturning: isReturning,
-                deviceType: deviceType,
-                trafficSource: trafficSource,
-                referrer: referrer,
-                geo: geo,
+                deviceType: uaParser.getDevice().type || 'Desktop',
+                trafficSource: req.headers['referer'] || 'Direct',
+                geo: req.geo,
                 ua: {
-                    browser: uaParser.getBrowser(),
-                    os: uaParser.getOS(),
-                    device: uaParser.getDevice(),
-                    engine: uaParser.getEngine()
+                    browser: uaParser.getBrowser().name,
+                    os: uaParser.getOS().name
                 }
             };
 
             analyticsData.hits.push(hit);
-
-            // Trim history
-            if (analyticsData.hits.length > 20000) {
-                analyticsData.hits = analyticsData.hits.slice(-10000);
+            if (analyticsData.hits.length > 10000) {
+                analyticsData.hits = analyticsData.hits.slice(-5000);
             }
         } catch (err) {
             // track hit fail
@@ -157,111 +128,69 @@ export const analytics = {
     },
 
     trackEvent: (type, data) => {
-        const hit = {
+        const event = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2),
             timestamp: Date.now(),
             type: type,
-            data: data,
-            ua: { browser: {}, os: {}, device: {} },
-            geo: {}
+            data: data
         };
-        analyticsData.hits.push(hit);
-        if (analyticsData.hits.length > 20000) analyticsData.hits = analyticsData.hits.slice(-10000);
+        analyticsData.hits.push(event);
+    },
+
+    // Firewall management
+    blockIP: (ip) => {
+        if (!analyticsData.blockedIPs.includes(ip)) {
+            analyticsData.blockedIPs.push(ip);
+            return true;
+        }
+        return false;
+    },
+    unblockIP: (ip) => {
+        analyticsData.blockedIPs = analyticsData.blockedIPs.filter(i => i !== ip);
+    },
+    blockCountry: (code) => {
+        if (!analyticsData.blockedCountries.includes(code)) {
+            analyticsData.blockedCountries.push(code);
+            return true;
+        }
+        return false;
+    },
+    unblockCountry: (code) => {
+        analyticsData.blockedCountries = analyticsData.blockedCountries.filter(c => c !== code);
     },
 
     getStats: (activeSocketCount = 0) => {
         try {
             const now = Date.now();
             const oneDay = 24 * 60 * 60 * 1000;
-
-            // Filter hits
-            const hits = analyticsData.hits.filter(h => !h.type || h.type === 'hit');
+            const hits = analyticsData.hits.filter(h => !h.type);
             const last24h = hits.filter(h => now - h.timestamp < oneDay);
-
-            // Unique visitors
-            const uniqueIPs = new Set(last24h.map(h => h.ip)).size;
-
-            // New vs Returning
-            const newVisitors = last24h.filter(h => !h.isReturning).length;
-            const returningVisitors = last24h.filter(h => h.isReturning).length;
-
-            // Device Types
-            const deviceTypes = {};
-            last24h.forEach(h => {
-                const type = h.deviceType || 'Desktop';
-                deviceTypes[type] = (deviceTypes[type] || 0) + 1;
-            });
-
-            // Traffic Sources
-            const trafficSources = {};
-            last24h.forEach(h => {
-                const source = h.trafficSource || 'Direct';
-                trafficSources[source] = (trafficSources[source] || 0) + 1;
-            });
-
-            // Countries
-            const countries = {};
-            last24h.forEach(h => {
-                if (h.geo && h.geo.countryCode) {
-                    countries[h.geo.countryCode] = (countries[h.geo.countryCode] || 0) + 1;
-                } else if (h.geo && h.geo.country) {
-                    countries[h.geo.country] = (countries[h.geo.country] || 0) + 1;
-                }
-            });
-
-            // Cities
-            const cities = {};
-            last24h.forEach(h => {
-                if (h.geo && h.geo.city) {
-                    const key = `${h.geo.city}, ${h.geo.regionName || h.geo.region || ''}, ${h.geo.country}`;
-                    cities[key] = (cities[key] || 0) + 1;
-                }
-            });
-
-            // Browsers/OS
-            const browsers = {};
-            const os = {};
-            last24h.forEach(h => {
-                const b = h.ua?.browser?.name || 'Unknown';
-                const o = h.ua?.os?.name || 'Unknown';
-                browsers[b] = (browsers[b] || 0) + 1;
-                os[o] = (os[o] || 0) + 1;
-            });
-
-            // Heatmap
-            const mapData = last24h.map(h => h.geo ? h.geo.ll : null).filter(ll => ll);
-
-            // Timeline
-            const timeline = new Array(24).fill(0);
-            last24h.forEach(h => {
-                const diffHours = Math.floor((now - h.timestamp) / (1000 * 60 * 60));
-                if (diffHours < 24) {
-                    timeline[diffHours]++;
-                }
-            });
-
-            const chartData = timeline.reverse();
-            const recent = analyticsData.hits.slice(-50).reverse();
 
             return {
                 totalHitsAllTime: hits.length,
                 hits24h: last24h.length,
                 activeUsers: activeSocketCount,
-                uniqueVisitors: uniqueIPs,
-                newVisitors,
-                returningVisitors,
-                deviceTypes,
-                trafficSources,
-                countries,
-                cities,
-                browsers,
-                os,
-                mapData,
-                timeline: chartData,
-                recent
+                uniqueVisitors: new Set(last24h.map(h => h.ip)).size,
+                blockedIPs: analyticsData.blockedIPs.length,
+                blockedCountries: analyticsData.blockedCountries,
+                recent: analyticsData.hits.slice(-50).reverse(),
+                // Simplified timeline for charts
+                timeline: analytics.getTimeline(last24h)
             };
         } catch (err) {
             return { error: true, message: err.message };
         }
+    },
+
+    getTimeline: (hits) => {
+        const now = Date.now();
+        const timeline = new Array(24).fill(0);
+        hits.forEach(h => {
+            const diffHours = Math.floor((now - h.timestamp) / (1000 * 60 * 60));
+            if (diffHours < 24) {
+                timeline[23 - diffHours]++;
+            }
+        });
+        return timeline;
     }
 };

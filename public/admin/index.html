@@ -78,6 +78,31 @@
         </div>
 
         <div class="card full-width">
+            <h3>Firewall & Security</h3>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 300px;">
+                    <label
+                        style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Block
+                        New IP</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="firewall-ip-input" placeholder="e.g. 192.168.1.1" style="margin: 0;">
+                        <button onclick="blockIP()"
+                            style="padding: 0 1rem; height: 40px; border-radius: 4px;">Block</button>
+                    </div>
+                </div>
+                <div style="flex: 1; min-width: 300px;">
+                    <label
+                        style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Blocked
+                        Countries</label>
+                    <div id="blocked-countries-list"
+                        style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                        <!-- JS injected -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
             <h3>Recent Hits</h3>
             <div class="table-container">
                 <table>
@@ -88,6 +113,7 @@
                             <th>Path</th>
                             <th>Loc</th>
                             <th>OS/Browser</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="recent-table"></tbody>

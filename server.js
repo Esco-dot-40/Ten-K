@@ -29,12 +29,16 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// Middleware to track analytics
+// 🛡️ Firewall & Analytics Middleware
 app.use(async (req, res, next) => {
-    // Only track actual page hits, ignore API calls for general hit tracking
-    if (!req.path.startsWith('/api/') && !req.path.includes('.')) {
-        analytics.trackHit(req).catch(e => { });
+    // 1. Firewall Check (IP & Geo-Blocking)
+    const isAllowed = await analytics.checkAllowed(req);
+    if (!isAllowed) {
+        return res.status(403).send('Access Denied: Restricted by Firewall/Region Block');
     }
+
+    // 2. Track Analytics (Simplified)
+    analytics.trackHit(req).catch(() => { });
     next();
 });
 
@@ -93,6 +97,39 @@ app.get('/api/admin/stats', (req, res) => {
     } else {
         res.status(401).json({ error: "Unauthorized" });
     }
+});
+
+// Firewall Management API
+app.post('/api/admin/firewall/block-ip', (req, res) => {
+    const auth = req.headers['authorization'];
+    if (auth !== 'valid-token-' + ADMIN_PASS) return res.status(401).json({ error: "Unauthorized" });
+    const { ip } = req.body;
+    analytics.blockIP(ip);
+    res.json({ success: true });
+});
+
+app.post('/api/admin/firewall/unblock-ip', (req, res) => {
+    const auth = req.headers['authorization'];
+    if (auth !== 'valid-token-' + ADMIN_PASS) return res.status(401).json({ error: "Unauthorized" });
+    const { ip } = req.body;
+    analytics.unblockIP(ip);
+    res.json({ success: true });
+});
+
+app.post('/api/admin/firewall/block-country', (req, res) => {
+    const auth = req.headers['authorization'];
+    if (auth !== 'valid-token-' + ADMIN_PASS) return res.status(401).json({ error: "Unauthorized" });
+    const { countryCode } = req.body;
+    analytics.blockCountry(countryCode);
+    res.json({ success: true });
+});
+
+app.post('/api/admin/firewall/unblock-country', (req, res) => {
+    const auth = req.headers['authorization'];
+    if (auth !== 'valid-token-' + ADMIN_PASS) return res.status(401).json({ error: "Unauthorized" });
+    const { countryCode } = req.body;
+    analytics.unblockCountry(countryCode);
+    res.json({ success: true });
 });
 
 

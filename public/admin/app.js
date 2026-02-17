@@ -175,7 +175,7 @@ function renderStats(data) {
     // Top Locations List
     const countryContainer = document.getElementById('country-list');
     countryContainer.innerHTML = '';
-    // Use the cities data which contains City, Region, Country
+    // Use the cities data
     const sortedLocations = Object.entries(data.cities || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
     sortedLocations.forEach(([loc, count]) => {
         const div = document.createElement('div');
@@ -184,26 +184,74 @@ function renderStats(data) {
         countryContainer.appendChild(div);
     });
 
+    // Update Blocked Countries
+    const blockedCountryContainer = document.getElementById('blocked-countries-list');
+    blockedCountryContainer.innerHTML = '';
+    (data.blockedCountries || []).forEach(code => {
+        const span = document.createElement('span');
+        span.style.cssText = 'background: rgba(255, 77, 77, 0.2); border: 1px solid rgba(255, 77, 77, 0.5); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;';
+        span.textContent = code;
+        span.title = 'Click to unblock';
+        span.onclick = () => unblockCountry(code);
+        blockedCountryContainer.appendChild(span);
+    });
+
     // Recent Table
     const tableBody = document.getElementById('recent-table');
     tableBody.innerHTML = '';
     data.recent.forEach(hit => {
+        if (hit.type) return; // ignore non-hit events in table
         const tr = document.createElement('tr');
         const date = new Date(hit.timestamp).toLocaleTimeString();
 
         const city = hit.geo?.city || 'Unknown';
-        const region = hit.geo?.regionName || hit.geo?.region || '';
         const country = hit.geo?.countryCode || hit.geo?.country || '';
-        const locString = `${city}${region ? ', ' + region : ''} (${country})`;
-        const isp = hit.geo?.isp || hit.geo?.org || '';
+        const locString = `${city} (${country})`;
 
         tr.innerHTML = `
             <td>${date}</td>
             <td>${hit.ip}</td>
             <td style="font-size: 0.75rem; color: var(--text-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${hit.path}</td>
-            <td title="${isp}">${locString}</td>
-            <td style="font-size: 0.8rem;">${hit.ua.os.name || '??'} / ${hit.ua.browser.name || '??'}</td>
+            <td>${locString}</td>
+            <td style="font-size: 0.8rem;">${hit.ua.os || '??'} / ${hit.ua.browser || '??'}</td>
+            <td>
+                <button onclick="blockIP('${hit.ip}')" style="padding: 2px 8px; font-size: 0.7rem; background: var(--danger);">Block</button>
+                ${country ? `<button onclick="blockCountry('${country}')" style="padding: 2px 8px; font-size: 0.7rem; background: #ff9f43; margin-left: 4px;">Block ${country}</button>` : ''}
+            </td>
         `;
         tableBody.appendChild(tr);
     });
+}
+
+async function blockIP(ip) {
+    const target = ip || document.getElementById('firewall-ip-input').value;
+    if (!target) return;
+    if (!confirm(`Block IP ${target}?`)) return;
+
+    await fetch('/api/admin/firewall/block-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': authToken },
+        body: JSON.stringify({ ip: target })
+    });
+    loadStats();
+}
+
+async function blockCountry(code) {
+    if (!code || !confirm(`Block all traffic from ${code}?`)) return;
+    await fetch('/api/admin/firewall/block-country', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': authToken },
+        body: JSON.stringify({ countryCode: code })
+    });
+    loadStats();
+}
+
+async function unblockCountry(code) {
+    if (!confirm(`Unblock ${code}?`)) return;
+    await fetch('/api/admin/firewall/unblock-country', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': authToken },
+        body: JSON.stringify({ countryCode: code })
+    });
+    loadStats();
 }

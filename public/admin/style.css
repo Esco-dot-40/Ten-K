@@ -125,6 +125,34 @@ header {
     }
 }
 
+@media (max-width: 600px) {
+    #dashboard {
+        padding: 1rem;
+    }
+
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .login-box {
+        width: 100%;
+        padding: 2rem 1.5rem;
+        margin: 1rem;
+    }
+
+    .stat-card .value {
+        font-size: 1.8rem;
+    }
+
+    .grid-2,
+    .grid-3,
+    .stats-grid {
+        gap: 1rem;
+    }
+}
+
 .card {
     background: var(--card-bg);
     backdrop-filter: blur(12px);
