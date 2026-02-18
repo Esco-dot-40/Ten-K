@@ -181,6 +181,11 @@ class FarkleClient {
             // If we are here, we are a "Guest" by default or failed auth
             if (this.ui.headerLoginBtn) this.ui.headerLoginBtn.style.display = 'block';
 
+            // Show welcome screen for guests immediately
+            if (this.playerName) {
+                this.showWelcome(this.playerName);
+            }
+
             // Default to Mode Selection immediately
             const modeSelection = document.getElementById('mode-selection');
             if (modeSelection) modeSelection.style.display = 'block';
