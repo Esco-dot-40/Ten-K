@@ -99,7 +99,9 @@ class FarkleClient {
                 statsContent: document.getElementById('stats-content'),
                 statsModal: document.getElementById('stats-modal'), // Fix: missing reference
                 statsBtn: document.getElementById('stats-btn'),
-                headerLoginBtn: document.getElementById('header-login-btn')
+                headerLoginBtn: document.getElementById('header-login-btn'),
+                zoomSlider: document.getElementById('zoom-slider'),
+                zoomValue: document.getElementById('zoom-value')
             };
 
             // Hook up start button
@@ -551,6 +553,12 @@ class FarkleClient {
             quickMute.addEventListener('click', () => this.toggleMute());
         }
 
+        if (this.ui.zoomSlider) {
+            this.ui.zoomSlider.addEventListener('input', (e) => {
+                this.setZoom(parseFloat(e.target.value));
+            });
+        }
+
         // Restore Settings
         const savedVol = localStorage.getItem('farkle_volume');
         if (savedVol !== null && this.ui.volumeSlider) {
@@ -571,6 +579,11 @@ class FarkleClient {
             this.sounds.enabled = true; // Temporary set to true so toggleMute flips it to false
             this.toggleMute();
         }
+
+        const savedZoom = localStorage.getItem('farkle_ui_zoom');
+        if (savedZoom !== null) {
+            this.setZoom(parseFloat(savedZoom));
+        }
     }
 
     updateVolumeIcon(vol) {
@@ -582,6 +595,18 @@ class FarkleClient {
         if (this.ui.volumeIcon) this.ui.volumeIcon.innerHTML = iconHtml;
         const quickMuteIcon = document.querySelector('#quick-mute-btn svg');
         if (quickMuteIcon) quickMuteIcon.parentElement.innerHTML = iconHtml;
+    }
+
+    setZoom(val) {
+        if (!this.ui.app) return;
+        this.ui.app.style.transform = `scale(${val})`;
+        if (this.ui.zoomValue) {
+            this.ui.zoomValue.textContent = `${Math.round(val * 100)}%`;
+        }
+        if (this.ui.zoomSlider) {
+            this.ui.zoomSlider.value = val;
+        }
+        localStorage.setItem('farkle_ui_zoom', val);
     }
 
     initStatsUI() {

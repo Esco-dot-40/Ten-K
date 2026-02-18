@@ -287,6 +287,8 @@ body {
     z-index: 10;
     overflow: hidden;
     /* Prevent master scroll */
+    transform-origin: top center;
+    transition: transform 0.2s ease-out;
 }
 
 /* --- Header --- */
