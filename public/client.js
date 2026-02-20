@@ -1822,7 +1822,7 @@ class FarkleClient {
                 return;
             }
 
-            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            let html = '<table class="leaderboard-table">';
             html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
             html += '<th style="padding: 0.75rem; text-align: left; color: var(--primary);">Player</th>';
             html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Wins</th>';
@@ -1835,10 +1835,10 @@ class FarkleClient {
                 const winRate = player.gamesPlayed > 0 ? Math.round((player.wins / player.gamesPlayed) * 100) : 0;
                 html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
                 html += `<td style="padding: 0.75rem; font-weight: 600;">${idx + 1}. ${player.name || 'Anonymous'}</td>`;
-                html += `<td style="padding: 0.75rem; text-align: center; color: var(--success);">${player.wins}</td>`;
-                html += `<td style="padding: 0.75rem; text-align: center;">${player.gamesPlayed}</td>`;
-                html += `<td style="padding: 0.75rem; text-align: center;">${winRate}%</td>`;
-                html += `<td style="padding: 0.75rem; text-align: right; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</td>`;
+                html += `<td data-label="Wins" style="padding: 0.75rem; text-align: center; color: var(--success);">${player.wins}</td>`;
+                html += `<td data-label="Games" style="padding: 0.75rem; text-align: center;">${player.gamesPlayed}</td>`;
+                html += `<td data-label="Win %" style="padding: 0.75rem; text-align: center;">${winRate}%</td>`;
+                html += `<td data-label="High Score" style="padding: 0.75rem; text-align: right; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</td>`;
                 html += `</tr>`;
             });
 

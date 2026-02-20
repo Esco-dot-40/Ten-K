@@ -1689,3 +1689,51 @@ body[data-dice-theme='dark'] .pip {
         width: auto;
     }
 }
+
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+@media (max-width: 600px) {
+    .leaderboard-table thead {
+        display: none;
+    }
+
+    .leaderboard-table tr {
+        display: block;
+        margin-bottom: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .leaderboard-table td {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 4px !important;
+        border: none !important;
+        font-size: 0.9rem;
+    }
+
+    .leaderboard-table td::before {
+        content: attr(data-label);
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+    }
+
+    .leaderboard-table td:first-child {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        margin-bottom: 5px;
+        padding-bottom: 10px !important;
+        font-size: 1.1rem;
+        justify-content: center;
+    }
+
+    .leaderboard-table td:first-child::before {
+        display: none;
+    }
+}

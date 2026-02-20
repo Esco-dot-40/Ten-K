@@ -934,7 +934,11 @@ io.on('connection', (socket) => {
             if (existingPlayer) {
                 existingPlayer.connected = true;
                 if (data?.name && data.name !== existingPlayer.name) {
-                    existingPlayer.name = data.name; // Update name (e.g. late Discord auth)
+                    existingPlayer.name = data.name;
+                }
+                if (data?.dbId && !existingPlayer.dbId) {
+                    existingPlayer.dbId = data.dbId;
+                    console.log(`[Game ${roomCode}] Player ${existingPlayer.name} identified with DB ID: ${data.dbId}`);
                 }
                 socket.join(roomCode);
                 socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
