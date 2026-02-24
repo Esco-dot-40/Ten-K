@@ -42,13 +42,25 @@ class FarkleClient {
             this.gameState = null;
             this.discordSdk = null;
             // Load preserved name or default
-            const storedName = localStorage.getItem('farkle-username');
-            this.playerName = storedName || `Player ${Math.floor(Math.random() * 1000)}`;
+            // Priority: saved Discord data > farkle-username > random fallback
+            let initialName = null;
+            const savedUserData = localStorage.getItem('farkle_user_data');
+            if (savedUserData) {
+                try {
+                    const userData = JSON.parse(savedUserData);
+                    initialName = userData.global_name || userData.username;
+                    this.discordId = userData.id; // Pre-load discord ID too
+                } catch (e) { /* ignore parse errors */ }
+            }
+            if (!initialName) initialName = localStorage.getItem('farkle-username');
+            if (!initialName) initialName = `Player ${Math.floor(Math.random() * 1000)}`;
+            this.playerName = initialName;
             this.isRolling = false;
             this.pendingState = null;
             this.rules = {}; // Will load from server state
             this.isSpeedMode = false;
             this.isSpectator = false; // NEW
+            this.activityInstanceId = null; // Discord Activity instance ID for room coordination
             this.reconnectToken = localStorage.getItem('farkle-reconnect-token') || null;
             if (!this.reconnectToken) {
                 this.reconnectToken = 'rt_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -220,6 +232,7 @@ class FarkleClient {
             const savedUser = localStorage.getItem('farkle_user_data');
 
 
+            let hasRestoredSession = false;
             if (savedToken && savedUser) {
                 try {
                     const user = JSON.parse(savedUser);
@@ -232,10 +245,8 @@ class FarkleClient {
                     // Helper to track analytics for restored session
                     this.identifyAnalytics(user);
 
-                    // Progress to mode selection
-                    const modeSelection = document.getElementById('mode-selection');
-                    if (modeSelection) modeSelection.style.display = 'block';
-                    return;
+                    hasRestoredSession = true;
+                    // Don't return early — still need SDK ready for instanceId
                 } catch (e) {
                     localStorage.removeItem('farkle_auth_token');
                     localStorage.removeItem('farkle_user_data');
@@ -255,7 +266,26 @@ class FarkleClient {
                 await Promise.race([this.discordSdk.ready(), readyTimeout]);
             } catch (readyErr) {
                 this.addDebugMessage(`❌ SDK Ready failed`);
+                // If we have a restored session, we can still proceed without instanceId
+                if (hasRestoredSession) {
+                    const modeSelection = document.getElementById('mode-selection');
+                    if (modeSelection) modeSelection.style.display = 'block';
+                    return;
+                }
                 throw readyErr;
+            }
+
+            // Capture instanceId for Activity room coordination
+            if (this.discordSdk.instanceId) {
+                this.activityInstanceId = this.discordSdk.instanceId;
+                this.addDebugMessage(`🔗 Activity Instance: ${this.activityInstanceId.substring(0, 8)}...`);
+            }
+
+            // If we already have a restored session, skip full auth flow
+            if (hasRestoredSession) {
+                // Init socket now so we can use instanceId for room coordination
+                this.initSocket();
+                return;
             }
 
 
@@ -317,14 +347,14 @@ class FarkleClient {
 
             // Notify server of the identified name if already in a room
             if (this.roomCode && this.socket) {
-                this.socket.emit('join_game', {
-                    roomCode: this.roomCode,
-                    spectator: this.isSpectator,
-                    reconnectToken: this.reconnectToken,
+                this.socket.emit('update_name', {
                     name: this.playerName,
                     dbId: this.discordId || null
                 });
             }
+
+            // Init socket if not already done (fresh auth flow)
+            this.initSocket();
 
         } catch (err) {
             console.error("Discord Auth Failed/Cancelled", err);
@@ -786,19 +816,13 @@ class FarkleClient {
                 this.playerName = user.global_name || user.username;
                 this.discordId = user.id;
 
-                this.playerName = user.global_name || user.username;
-                this.discordId = user.id;
-
                 if (this.ui.headerLoginBtn) this.ui.headerLoginBtn.style.display = 'none';
                 this.showWelcome(this.playerName, user.avatar, user.id);
                 this.identifyAnalytics(user);
 
                 // Update server with new Discord name
                 if (this.roomCode && this.socket) {
-                    this.socket.emit('join_game', {
-                        roomCode: this.roomCode,
-                        spectator: this.isSpectator,
-                        reconnectToken: this.reconnectToken,
+                    this.socket.emit('update_name', {
                         name: this.playerName,
                         dbId: this.discordId || null
                     });
@@ -946,18 +970,35 @@ class FarkleClient {
             const loadMsg = document.getElementById('connection-debug');
             if (loadMsg) loadMsg.style.display = 'none';
 
-            if (!this.roomCode) {
-                modeSelection.style.display = 'block';
-            }
-
-            if (this.roomCode) {
+            // Discord Activity mode: use instanceId for auto room coordination
+            if (this.activityInstanceId && !this.roomCode) {
+                this.addDebugMessage('🎮 Requesting Activity Room...');
+                this.socket.emit('join_activity', {
+                    instanceId: this.activityInstanceId,
+                    reconnectToken: this.reconnectToken,
+                    name: this.playerName,
+                    dbId: this.discordId || null
+                });
+            } else if (this.roomCode) {
+                // Reconnecting to existing room
                 this.socket.emit('join_game', {
                     roomCode: this.roomCode,
                     reconnectToken: this.reconnectToken,
                     name: this.playerName,
                     dbId: this.discordId || null
                 });
+            } else {
+                // Web mode: show mode selection
+                if (modeSelection) modeSelection.style.display = 'block';
             }
+        });
+
+        // Discord Activity auto-room assignment
+        this.socket.on('activity_room', ({ roomCode }) => {
+            this.addDebugMessage(`🎮 Activity Room Assigned: ${roomCode}`);
+            this.roomCode = roomCode;
+            sessionStorage.setItem('farkle-room-code', roomCode);
+            // The server already joined us to the room, the 'joined' event will follow
         });
 
         this.socket.on('connect_error', (err) => {

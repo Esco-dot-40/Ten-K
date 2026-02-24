@@ -330,6 +330,7 @@ class GameState {
         };
         this.turnStartTime = Date.now();
         this.reminded = false;
+        this.persistence = {}; // Key: dbId or reconnectToken, Value: player data
     }
 
     startVote(type, playerId) {
@@ -790,41 +791,58 @@ class GameState {
     }
 
     checkAFK(io) {
-        if (this.gameStatus !== 'playing') return;
-
         const now = Date.now();
-        const idleTime = (now - this.turnStartTime) / 1000;
-        const player = this.players[this.currentPlayerIndex];
 
-        if (!player) return;
+        if (this.gameStatus === 'playing') {
+            const idleTime = (now - this.turnStartTime) / 1000;
+            const player = this.players[this.currentPlayerIndex];
 
-        // 60s Reminder
-        if (idleTime >= 60 && !this.reminded) {
-            this.reminded = true;
-            if (player.connected) {
-                io.to(player.id).emit('turn_reminder');
-                console.log(`[Game ${this.roomCode}] Reminded ${player.name} to take turn.`);
+            if (player) {
+                // 60s Reminder
+                if (idleTime >= 60 && !this.reminded) {
+                    this.reminded = true;
+                    if (player.connected) {
+                        io.to(player.id).emit('turn_reminder');
+                        console.log(`[Game ${this.roomCode}] Reminded ${player.name} to take turn.`);
+                    }
+                }
+
+                // Auto-skip after 90s
+                if (idleTime >= 90) {
+                    const skipName = player.name;
+                    console.log(`[Game ${this.roomCode}] Auto-skipping ${skipName} due to inactivity (90s).`);
+                    this.nextTurn();
+                    io.to(this.roomCode).emit('chat_message', {
+                        sender: "System",
+                        message: `${skipName}'s turn was skipped due to inactivity.`,
+                        isSystem: true
+                    });
+                    io.to(this.roomCode).emit('game_state_update', this.getState());
+                }
             }
         }
 
-        // Auto-skip after 90s
-        if (idleTime >= 90) {
-            const skipName = player.name;
-            console.log(`[Game ${this.roomCode}] Auto-skipping ${skipName} due to inactivity (90s).`);
-            this.nextTurn();
-            io.to(this.roomCode).emit('chat_message', {
-                sender: "System",
-                message: `${skipName}'s turn was skipped due to inactivity.`,
-                isSystem: true
-            });
-            io.to(this.roomCode).emit('game_state_update', this.getState());
-        }
 
-        // Clean up disconnected players after 5 minutes (300s)
+        // Clean up disconnected players after 3 minutes (180s)
         for (let i = this.players.length - 1; i >= 0; i--) {
             const p = this.players[i];
-            if (!p.connected && p.disconnectTime && (now - p.disconnectTime) > 300000) {
-                console.log(`[Game ${this.roomCode}] Removing ${p.name} permanently (5 mins disconnected).`);
+            if (!p.connected && p.disconnectTime && (now - p.disconnectTime) > 180000) {
+                console.log(`[Game ${this.roomCode}] Removing ${p.name} (3 mins disconnected). Saving to persistence.`);
+
+                // Save to persistence before removing
+                const key = p.dbId || p.reconnectToken;
+                if (key) {
+                    this.persistence[key] = {
+                        name: p.name,
+                        score: p.score,
+                        farkles: p.farkles,
+                        hasOpened: p.hasOpened,
+                        maxRoundScore: p.maxRoundScore,
+                        seat: p.seat,
+                        dbId: p.dbId,
+                        reconnectToken: p.reconnectToken
+                    };
+                }
 
                 const wasCurrent = (i === this.currentPlayerIndex);
                 this.players.splice(i, 1);
@@ -850,12 +868,138 @@ class GameState {
 
 // Game definitions moved to bottom of file
 
+// Discord Activity instance → room code mapping
+const activityRooms = new Map();
+
 io.on('connection', (socket) => {
 
     socket.emit('room_list', getRoomList());
 
     socket.on('get_room_list', () => {
         socket.emit('room_list', getRoomList());
+    });
+
+    // Discord Activity room coordination
+    socket.on('join_activity', (data) => {
+        try {
+            const instanceId = data?.instanceId;
+            if (!instanceId) {
+                socket.emit('error', 'No Activity instance ID');
+                return;
+            }
+
+            let roomCode = activityRooms.get(instanceId);
+
+            // If no room mapped yet, find the first casual room with space
+            if (!roomCode || !games.has(roomCode)) {
+                // Find a casual room with the fewest players (or empty)
+                let bestRoom = null;
+                let bestCount = Infinity;
+                for (const [code, game] of games.entries()) {
+                    if (game.rules.category === 'casual') {
+                        const count = game.players.filter(p => p.connected).length;
+                        if (count < bestCount && count < 10) {
+                            bestRoom = code;
+                            bestCount = count;
+                        }
+                    }
+                }
+                roomCode = bestRoom || 'Classic 1';
+                activityRooms.set(instanceId, roomCode);
+                console.log(`[Activity] Mapped instance ${instanceId.substring(0, 8)} → room ${roomCode}`);
+            }
+
+            // Now join the player to this room (reuse join_game logic)
+            const game = games.get(roomCode);
+            if (!game) {
+                socket.emit('error', 'Room not found');
+                return;
+            }
+
+            // Check for reconnect
+            const token = data?.reconnectToken;
+            let existingPlayer = null;
+            if (token) {
+                existingPlayer = game.players.find(p => p.reconnectToken === token && !p.connected);
+            }
+
+            if (existingPlayer) {
+                existingPlayer.id = socket.id;
+                existingPlayer.connected = true;
+                existingPlayer.missedTurns = 0;
+                if (data?.name && data.name !== existingPlayer.name) {
+                    existingPlayer.name = data.name;
+                }
+                socket.join(roomCode);
+                socket.emit('activity_room', { roomCode });
+                socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
+                if (!game.checkAutoStart(io)) {
+                    io.to(roomCode).emit('game_state_update', game.getState());
+                }
+                return;
+            }
+
+            // New player
+            let name = data?.name;
+            if (!name) {
+                for (let i = 1; i <= 10; i++) {
+                    let candidate = `Player ${i}`;
+                    if (!game.players.some(p => p.name === candidate)) {
+                        name = candidate;
+                        break;
+                    }
+                }
+            } else {
+                let baseName = name;
+                let counter = 1;
+                while (game.players.some(p => p.name === name)) {
+                    name = `${baseName} (${++counter})`;
+                }
+            }
+
+            if (game.players.length >= 10) {
+                socket.emit('error', 'Room Full');
+                return;
+            }
+
+            socket.playerName = name;
+            game.addPlayer(socket.id, name, data?.reconnectToken, data?.dbId);
+            socket.join(roomCode);
+            socket.emit('activity_room', { roomCode });
+            socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
+
+            if (!game.checkAutoStart(io)) {
+                io.to(roomCode).emit('game_state_update', game.getState());
+            }
+            io.emit('room_list', getRoomList());
+
+            console.log(`[Activity] Player ${name} joined room ${roomCode} via instance ${instanceId.substring(0, 8)}`);
+        } catch (err) {
+            console.error('Error in join_activity:', err);
+            socket.emit('error', 'Server Error');
+        }
+    });
+
+    // Update player name after Discord auth completes
+    socket.on('update_name', (data) => {
+        const newName = data?.name;
+        const dbId = data?.dbId;
+        if (!newName) return;
+
+        for (const game of games.values()) {
+            const player = game.players.find(p => p.id === socket.id);
+            if (player) {
+                if (player.name !== newName) {
+                    console.log(`[Name Update] ${player.name} → ${newName} in room ${game.roomCode}`);
+                    player.name = newName;
+                }
+                if (dbId && !player.dbId) {
+                    player.dbId = dbId;
+                }
+                io.to(game.roomCode).emit('game_state_update', game.getState());
+                break;
+            }
+        }
     });
 
     socket.on('join_game', (data) => {
@@ -873,21 +1017,78 @@ io.on('connection', (socket) => {
 
             // Checking if already in as player (Reconnect Logic)
             let existingPlayer = null;
-
-            // Check by reconnectToken first
             const token = data?.reconnectToken;
-            if (token) {
-                existingPlayer = game.players.find(p => p.reconnectToken === token && !p.connected);
-                if (existingPlayer) {
-                    // console.log(`[Game ${roomCode}] Player Reconnected: ${existingPlayer.name}`);
-                    existingPlayer.id = socket.id; // Update socket ID
-                    existingPlayer.connected = true;
-                    existingPlayer.missedTurns = 0; // Reset AFK counter
-                    socket.join(roomCode);
+            const dbId = data?.dbId;
 
-                    // Restore host if needed
+            // 1. Check active players list (even if marked as disconnected)
+            // We search by token or dbId to recognize the returning player
+            existingPlayer = game.players.find(p =>
+                (token && p.reconnectToken === token) ||
+                (dbId && p.dbId === dbId)
+            );
+
+            if (existingPlayer) {
+                console.log(`[Game ${roomCode}] Player Reconnected (In-Game): ${existingPlayer.name}`);
+                existingPlayer.id = socket.id; // Update socket ID
+                existingPlayer.connected = true;
+                existingPlayer.missedTurns = 0; // Reset AFK counter
+
+                // Update name if provided and likely fresher
+                if (data?.name && data.name !== existingPlayer.name) {
+                    existingPlayer.name = data.name;
+                }
+                if (dbId && !existingPlayer.dbId) existingPlayer.dbId = dbId;
+
+                socket.join(roomCode);
+
+                // Restore host if needed
+                if (!game.hostId || !game.players.find(p => p.id === game.hostId && p.connected)) {
+                    game.hostId = existingPlayer.id;
+                }
+
+                socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
+                if (!game.checkAutoStart(io)) {
+                    io.to(roomCode).emit('game_state_update', game.getState());
+                }
+                return;
+            }
+
+            // 2. Check persistence list (players who were purged from active list after 3 mins)
+            const persistKey = dbId || token;
+            if (persistKey && game.persistence[persistKey]) {
+                const pData = game.persistence[persistKey];
+                console.log(`[Game ${roomCode}] Restoring player ${pData.name} from persistence.`);
+
+                // Ensure room is not full before restoring
+                if (game.players.length < 10) {
+                    // Find available seat (prefer old one if possible)
+                    let seat = pData.seat;
+                    if (game.players.some(p => p.seat === seat)) {
+                        seat = 0;
+                        while (game.players.some(p => p.seat === seat)) seat++;
+                    }
+
+                    const restoredPlayer = {
+                        id: socket.id,
+                        name: data?.name || pData.name,
+                        score: pData.score,
+                        connected: true,
+                        farkles: pData.farkles,
+                        hasOpened: pData.hasOpened,
+                        reconnectToken: token || pData.reconnectToken,
+                        dbId: dbId || pData.dbId,
+                        missedTurns: 0,
+                        maxRoundScore: pData.maxRoundScore,
+                        seat: seat
+                    };
+
+                    game.players.push(restoredPlayer);
+                    game.players.sort((a, b) => a.seat - b.seat);
+                    delete game.persistence[persistKey];
+
+                    socket.join(roomCode);
                     if (!game.hostId || !game.players.find(p => p.id === game.hostId && p.connected)) {
-                        game.hostId = existingPlayer.id;
+                        game.hostId = socket.id;
                     }
 
                     socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
@@ -898,14 +1099,11 @@ io.on('connection', (socket) => {
                 }
             }
 
-            // Global Reconnect Search
-            // If the user SPECIFICALLY asked for a room, we should respect that and not hijack them to an old room.
-            if (!existingPlayer && token && !requestedRoom) {
+            // 3. Global Reconnect Search (Check other rooms if user refreshed but didn't specify room)
+            if (token && !requestedRoom) {
                 for (const [code, g] of games.entries()) {
-                    if (code === roomCode) continue;
-                    const p = g.players.find(p => p.reconnectToken === token && !p.connected);
+                    const p = g.players.find(p => p.reconnectToken === token);
                     if (p) {
-                        // console.log(`[Global Reconnect] Found player ${p.name} in ${code}`);
                         game = g;
                         roomCode = code;
                         existingPlayer = p;
@@ -927,26 +1125,6 @@ io.on('connection', (socket) => {
                         return;
                     }
                 }
-            }
-
-            // Fallback: Check strictly by socket ID (unlikely on refresh, but good for same-session re-joins)
-            existingPlayer = game.players.find(p => p.id === socket.id);
-            if (existingPlayer) {
-                existingPlayer.connected = true;
-                if (data?.name && data.name !== existingPlayer.name) {
-                    existingPlayer.name = data.name;
-                }
-                if (data?.dbId && !existingPlayer.dbId) {
-                    existingPlayer.dbId = data.dbId;
-                    console.log(`[Game ${roomCode}] Player ${existingPlayer.name} identified with DB ID: ${data.dbId}`);
-                }
-                socket.join(roomCode);
-                socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
-
-                if (!game.checkAutoStart(io)) {
-                    io.to(roomCode).emit('game_state_update', game.getState());
-                }
-                return;
             }
 
             if (isSpectator) {
@@ -1180,6 +1358,7 @@ io.on('connection', (socket) => {
             game.resetRound();
             game.isFinalRound = false;
             game.winner = null;
+            game.persistence = {}; // Clear persistence on full restart
             io.to(roomCode).emit('game_start', game.getState());
         }
     });
@@ -1225,6 +1404,7 @@ io.on('connection', (socket) => {
                     game.resetRound();
                     game.isFinalRound = false;
                     game.winner = null;
+                    game.persistence = {}; // Clear persistence on vote-reset
                 }
                 game.clearVotes();
                 io.to(roomCode).emit('game_state_update', game.getState());
@@ -1258,6 +1438,7 @@ io.on('connection', (socket) => {
                 game.resetRound();
                 game.isFinalRound = false;
                 game.winner = null;
+                game.persistence = {}; // Clear persistence on debug restart
                 game.clearVotes();
                 io.to(roomCode).emit('game_start', game.getState());
             } else {
@@ -1293,16 +1474,8 @@ io.on('connection', (socket) => {
                     }, 120000);
                 }
                 io.emit('room_list', getRoomList());
-                if (game.gameStatus === 'waiting') {
-                    // In waiting lobby, remove immediately? Or keep same logic? 
-                    // Usually waiting lobby allows instant drop so slots open up.
-                    // But if it's 'waiting' (pre-game), we might want to keep the slot for a second?
-                    // Actually, for pre-game, remove immediately is better to free slots.
-                    // But if it's the ONLY player, we just reset above. 
-                    // If others are there, we remove this player.
-                    game.players = game.players.filter(pl => pl.id !== socket.id);
-                    io.emit('room_list', getRoomList());
-                }
+                // No longer remove immediately in 'waiting' to allow for refreshes/reconnects
+                io.to(game.roomCode).emit('game_state_update', game.getState());
             }
         }
     });
