@@ -40,9 +40,7 @@ app.use(express.json());
 
 // Log incoming requests for debugging
 app.use((req, res, next) => {
-    if (req.url === '/' || req.url === '/index.html') {
-        console.log(`[REQUEST] Serving index.html to ${req.ip} | User-Agent: ${req.get('user-agent')}`);
-    }
+    console.log(`[REQUEST] ${req.method} ${req.url} from ${req.ip} | UA: ${req.get('user-agent')}`);
     next();
 });
 
