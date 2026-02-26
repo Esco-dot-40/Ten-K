@@ -255,38 +255,40 @@ export const db = {
             if (dbType === 'postgres') {
                 const res = await pool.query(`
                     SELECT 
+                        u.id,
                         u.username, 
                         u.display_name, 
                         u.avatar, 
-                        s.wins, 
-                        s.games_played,
-                        s.total_score, 
-                        s.highest_round_score as highest_score
-                    FROM user_stats s
-                    JOIN users u ON s.user_id = u.id
-                    WHERE s.games_played > 0
-                    ORDER BY s.wins DESC, s.total_score DESC
+                        COALESCE(s.wins, 0) as wins, 
+                        COALESCE(s.games_played, 0) as games_played,
+                        COALESCE(s.total_score, 0) as total_score, 
+                        COALESCE(s.highest_round_score, 0) as highest_score
+                    FROM users u
+                    LEFT JOIN user_stats s ON u.id = s.user_id
+                    ORDER BY s.wins DESC NULLS LAST, s.total_score DESC NULLS LAST
                 `);
                 rows = res.rows;
             } else if (dbType === 'sqlite') {
                 rows = sqliteDb.prepare(`
                     SELECT 
+                        u.id,
                         u.username, 
                         u.display_name, 
                         u.avatar, 
-                        s.wins, 
-                        s.games_played,
-                        s.total_score, 
-                        s.highest_round_score as highest_score
-                    FROM user_stats s
-                    JOIN users u ON s.user_id = u.id
-                    WHERE s.games_played > 0
+                        IFNULL(s.wins, 0) as wins, 
+                        IFNULL(s.games_played, 0) as games_played,
+                        IFNULL(s.total_score, 0) as total_score, 
+                        IFNULL(s.highest_round_score, 0) as highest_score
+                    FROM users u
+                    LEFT JOIN user_stats s ON u.id = s.user_id
                     ORDER BY s.wins DESC, s.total_score DESC
                 `).all();
             }
 
             return rows.map(row => ({
+                id: row.id,
                 name: row.display_name || row.username,
+                avatar: row.avatar,
                 wins: row.wins,
                 gamesPlayed: row.games_played,
                 highestScore: row.highest_score,

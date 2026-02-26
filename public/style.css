@@ -1510,25 +1510,26 @@ body[data-dice-theme='dark'] .pip {
     }
 
     .player-zones.seated-layout {
-        grid-template-columns: repeat(auto-fit, minmax(85px, 1fr)) !important;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) !important;
         gap: 4px;
     }
 
     .player-seat {
-        height: 55px !important;
+        min-height: 65px;
     }
 
     .player-card {
-        padding: 0.5rem;
+        padding: 8px 12px;
         height: 100%;
         display: flex;
-        flex-direction: column;
+        align-items: center;
         justify-content: center;
+        position: relative;
     }
 
     .player-name {
-        font-size: 0.75rem;
-        max-width: 80px;
+        font-size: 0.85rem;
+        max-width: 130px;
         margin-bottom: 0;
     }
 

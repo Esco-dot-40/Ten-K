@@ -123,6 +123,16 @@
       "trafficSource": "Direct",
       "geo": null,
       "ua": {}
+    },
+    {
+      "id": "mm3chtw9kw4sd2m2hpl",
+      "timestamp": 1772103207321,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {}
     }
   ],
   "blockedIPs": [],

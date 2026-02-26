@@ -412,6 +412,7 @@ class GameState {
             reconnectToken: reconnectToken || null,
             missedTurns: 0,
             dbId: dbId || null,
+            avatar: null, // Initial placeholder
             farkles: 0,
             maxRoundScore: 0,
             seat: seat // Assign seat
@@ -1260,6 +1261,18 @@ io.on('connection', (socket) => {
             }
 
             game.addPlayer(socket.id, name, data?.reconnectToken, dbId);
+
+            // Sync Avatar from DB
+            const p = game.players.find(p => p.id === socket.id);
+            if (p && dbId) {
+                try {
+                    const user = await db.getUser(dbId);
+                    if (user && user.avatar) {
+                        p.avatar = user.avatar;
+                    }
+                } catch (e) { }
+            }
+
             socket.join(roomCode);
             socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
 

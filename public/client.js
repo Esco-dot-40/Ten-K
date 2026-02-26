@@ -1391,21 +1391,59 @@ class FarkleClient {
                 if (isCurrent) card.classList.add('active');
 
                 // Content
+                const content = document.createElement('div');
+                content.style.display = 'flex';
+                content.style.alignItems = 'center';
+                content.style.gap = '10px';
+                content.style.width = '100%';
+
+                const avatarUrl = player.avatar
+                    ? `https://cdn.discordapp.com/avatars/${player.dbId}/${player.avatar}.png`
+                    : `https://cdn.discordapp.com/embed/avatars/${parseInt(player.dbId || 0) % 5}.png`;
+
+                const avatarImg = document.createElement('img');
+                avatarImg.src = avatarUrl;
+                avatarImg.style.width = '24px';
+                avatarImg.style.height = '24px';
+                avatarImg.style.borderRadius = '50%';
+                avatarImg.style.border = '1px solid var(--primary)';
+                avatarImg.onerror = () => { avatarImg.src = 'https://cdn.discordapp.com/embed/avatars/0.png'; };
+
+                const infoWrapper = document.createElement('div');
+                infoWrapper.style.flex = '1';
+                infoWrapper.style.minWidth = '0'; // Crucial for ellipsis
+
                 const info = document.createElement('div');
                 info.className = 'player-name';
+                info.style.whiteSpace = 'nowrap';
+                info.style.overflow = 'hidden';
+                info.style.textOverflow = 'ellipsis';
+                info.style.fontSize = '0.8rem';
                 info.textContent = player.name + (player.id === this.socket.id ? ' (You)' : '');
 
                 const score = document.createElement('div');
                 score.className = 'player-score';
+                score.style.fontSize = '0.75rem';
+                score.style.fontWeight = '800';
                 score.textContent = player.score.toLocaleString();
 
-                card.appendChild(info);
-                card.appendChild(score);
+                infoWrapper.appendChild(info);
+                infoWrapper.appendChild(score);
+
+                content.appendChild(avatarImg);
+                content.appendChild(infoWrapper);
+
+                card.appendChild(content);
 
                 // Host Badge
                 if (this.gameState.hostId === player.id) {
                     const hostBadge = document.createElement('span');
                     hostBadge.className = 'host-badge';
+                    hostBadge.style.fontSize = '0.6rem';
+                    hostBadge.style.scale = '0.8';
+                    hostBadge.style.position = 'absolute';
+                    hostBadge.style.top = '-5px';
+                    hostBadge.style.right = '-5px';
                     hostBadge.textContent = 'HOST';
                     card.appendChild(hostBadge);
                 }
@@ -1873,27 +1911,34 @@ class FarkleClient {
                 return;
             }
 
-            let html = '<table class="leaderboard-table">';
-            html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
-            html += '<th style="padding: 0.75rem; text-align: left; color: var(--primary);">Player</th>';
-            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Wins</th>';
-            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Games</th>';
-            html += '<th style="padding: 0.75rem; text-align: center; color: var(--primary);">Win %</th>';
-            html += '<th style="padding: 0.75rem; text-align: right; color: var(--primary);">High Score</th>';
-            html += '</tr></thead><tbody>';
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; width: 100%;">';
 
             stats.forEach((player, idx) => {
                 const winRate = player.gamesPlayed > 0 ? Math.round((player.wins / player.gamesPlayed) * 100) : 0;
-                html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">`;
-                html += `<td style="padding: 0.75rem; font-weight: 600;">${idx + 1}. ${player.name || 'Anonymous'}</td>`;
-                html += `<td data-label="Wins" style="padding: 0.75rem; text-align: center; color: var(--success);">${player.wins}</td>`;
-                html += `<td data-label="Games" style="padding: 0.75rem; text-align: center;">${player.gamesPlayed}</td>`;
-                html += `<td data-label="Win %" style="padding: 0.75rem; text-align: center;">${winRate}%</td>`;
-                html += `<td data-label="High Score" style="padding: 0.75rem; text-align: right; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</td>`;
-                html += `</tr>`;
+                const avatarUrl = player.avatar
+                    ? `https://cdn.discordapp.com/avatars/${player.id}/${player.avatar}.png`
+                    : `https://cdn.discordapp.com/embed/avatars/${parseInt(player.id || 0) % 5}.png`;
+
+                html += `
+                <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="font-weight: 800; color: var(--text-muted); font-size: 0.8rem; width: 20px;">${idx + 1}</div>
+                    <img src="${avatarUrl}" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--primary);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;">${player.name || 'Anonymous'}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; gap: 8px;">
+                            <span>${player.wins}W</span>
+                            <span>${player.gamesPlayed}G</span>
+                            <span style="color: var(--success);">${winRate}%</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: var(--accent);">${player.highestScore?.toLocaleString() || 0}</div>
+                        <div style="font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase;">Best</div>
+                    </div>
+                </div>`;
             });
 
-            html += '</tbody></table>';
+            html += '</div>';
             this.ui.statsContent.innerHTML = html;
         } catch (e) {
             console.error('Failed to load stats:', e);
