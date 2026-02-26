@@ -52,10 +52,9 @@ app.get('/health', (req, res) => {
 // 🛡️ Firewall & Analytics Middleware
 app.use(async (req, res, next) => {
     // 1. Firewall Check (IP & Geo-Blocking)
-    const isAllowed = true; // FORCE ENABLED FOR DEBUGGING
+    const isAllowed = await analytics.checkAllowed(req);
     if (!isAllowed) {
-        console.warn(`[FIREWALL] Blocked request from ${req.ip} to ${req.url}`);
-        return res.status(403).send('Access Denied: Restricted by Firewall/Region Block');
+        console.warn(`[FIREWALL] Would block request from ${req.ip} to ${req.url} (currently non-blocking)`);
     }
 
     // 2. Track Analytics (Simplified)

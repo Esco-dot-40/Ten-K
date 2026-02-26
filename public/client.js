@@ -2580,3 +2580,15 @@ if (document.readyState === 'loading') {
         }
     }
 }
+
+// 🛠️ DISCORD RENDERING FIX: Force a window resize event after load
+// This helps resolve issues where the activity window stays white while the PIP preview is visible.
+window.addEventListener('load', () => {
+    console.log("[SYSTEM] Forcing rendering refresh...");
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        // Suble opacity toggle to kick-off Chromium rendering
+        document.body.style.opacity = '0.99';
+        setTimeout(() => { document.body.style.opacity = '1'; }, 50);
+    }, 1500);
+});
