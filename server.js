@@ -1072,7 +1072,7 @@ io.on('connection', (socket) => {
             // Checking if already in as player (Reconnect Logic)
             let existingPlayer = null;
             const token = data?.reconnectToken;
-            const dbId = data?.dbId;
+            let dbId = data?.dbId;
 
             // 1. Check active players list (even if marked as disconnected)
             // We search by token or dbId to recognize the returning player
@@ -1242,7 +1242,24 @@ io.on('connection', (socket) => {
             }
 
             socket.playerName = name;
-            game.addPlayer(socket.id, name, data?.reconnectToken, data?.dbId);
+
+            // 🏅 PERSISTENCE: Use Discord ID if available, fallback to reconnectToken for guests
+            dbId = data?.dbId || data?.reconnectToken;
+            if (dbId) {
+                try {
+                    // Pre-fill user in DB so they show up on leaderboards
+                    await db.upsertUser({
+                        id: dbId,
+                        username: baseName,
+                        global_name: baseName,
+                        avatar: null
+                    });
+                } catch (dbErr) {
+                    console.warn(`[Game ${roomCode}] DB Background Upsert Failed:`, dbErr.message);
+                }
+            }
+
+            game.addPlayer(socket.id, name, data?.reconnectToken, dbId);
             socket.join(roomCode);
             socket.emit('joined', { playerId: socket.id, state: game.getState(), isSpectator: false });
 

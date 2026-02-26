@@ -266,7 +266,6 @@ export const db = {
                     JOIN users u ON s.user_id = u.id
                     WHERE s.games_played > 0
                     ORDER BY s.wins DESC, s.total_score DESC
-                    LIMIT 50
                 `);
                 rows = res.rows;
             } else if (dbType === 'sqlite') {
@@ -283,7 +282,6 @@ export const db = {
                     JOIN users u ON s.user_id = u.id
                     WHERE s.games_played > 0
                     ORDER BY s.wins DESC, s.total_score DESC
-                    LIMIT 50
                 `).all();
             }
 
