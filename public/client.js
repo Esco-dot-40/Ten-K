@@ -189,19 +189,13 @@ class FarkleClient {
     // --- Discord Integration ---
     async initDiscord() {
         try {
-            // If we are here, we are a "Guest" by default or failed auth
-            if (this.ui.headerLoginBtn) this.ui.headerLoginBtn.style.display = 'block';
+            // Check for existing local session (highest priority for speed)
+            const savedToken = localStorage.getItem('farkle_auth_token');
+            const savedUser = localStorage.getItem('farkle_user_data');
 
-            // Show welcome screen for guests immediately
-            if (this.playerName) {
-                this.showWelcome(this.playerName);
-            }
-
-            // Default to Mode Selection immediately
-            const modeSelection = document.getElementById('mode-selection');
-            if (modeSelection) modeSelection.style.display = 'block';
+            // Hide debug message and show loading
             const loadMsg = document.getElementById('connection-debug');
-            if (loadMsg) loadMsg.style.display = 'none';
+            if (loadMsg) loadMsg.textContent = "Verifying Discord Identity...";
 
             this.debugLog("Loading Discord SDK...");
             let DiscordSDK;
@@ -228,11 +222,7 @@ class FarkleClient {
                 clientId: DISCORD_CLIENT_ID,
             });
 
-            // 1. Check for existing local session
-            const savedToken = localStorage.getItem('farkle_auth_token');
-            const savedUser = localStorage.getItem('farkle_user_data');
-
-
+            // 1. Check for existing local session (Already pulled at start of function)
             let hasRestoredSession = false;
             if (savedToken && savedUser) {
                 try {
@@ -359,11 +349,14 @@ class FarkleClient {
 
         } catch (err) {
             console.error("Discord Auth Failed/Cancelled", err);
-            // Fallback to mode selection even on failure
-            const modeSelection = document.getElementById('mode-selection');
-            if (modeSelection) modeSelection.style.display = 'block';
             const loadMsg = document.getElementById('connection-debug');
-            if (loadMsg) loadMsg.style.display = 'none';
+            if (loadMsg) {
+                loadMsg.innerHTML = `
+                    <div style="color: var(--danger); margin-bottom: 1rem;">Authentication Failed: ${err.message}</div>
+                    <button class="btn primary" onclick="location.reload()">Retry Authentication</button>
+                    <p style="font-size: 0.7rem; margin-top: 1rem; color: var(--text-muted);">Common issues: Ad-blockers, Network DNS, or Discord Client out of date.</p>
+                `;
+            }
         }
     }
 
@@ -878,8 +871,8 @@ class FarkleClient {
             this.ui.statsBtn.addEventListener('click', () => this.showStats());
         }
         if (this.ui.statsModal) {
-            this.ui.statsModal.querySelector('.close-modal').addEventListener('click', () => {
-                this.ui.statsModal.classList.add('hidden');
+            this.ui.statsModal.querySelectorAll('.close-modal').forEach(btn => {
+                btn.onclick = () => this.ui.statsModal.classList.add('hidden');
             });
         }
 
@@ -1901,7 +1894,7 @@ class FarkleClient {
         this.ui.statsContent.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Loading statistics...</p>';
 
         try {
-            const response = await fetch('/api/stats/leaderboard');
+            const response = await fetch(`/api/stats/leaderboard?t=${Date.now()}`);
             if (!response.ok) throw new Error('Failed to fetch stats');
 
             const stats = await response.json();
@@ -1911,7 +1904,13 @@ class FarkleClient {
                 return;
             }
 
-            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; width: 100%;">';
+            let html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0 10px;">
+                    <div style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                        Global Rankings <span style="color: var(--primary); margin-left: 8px; background: rgba(0, 242, 255, 0.1); padding: 2px 8px; border-radius: 10px; border: 1px solid rgba(0, 242, 255, 0.2);">${stats.length} Players Found</span>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; width: 100%;">`;
 
             stats.forEach((player, idx) => {
                 const winRate = player.gamesPlayed > 0 ? Math.round((player.wins / player.gamesPlayed) * 100) : 0;
