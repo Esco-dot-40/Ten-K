@@ -55,6 +55,76 @@
           "version": "144.0.0.0"
         }
       }
+    },
+    {
+      "id": "mm2r25ia4dze5hi04g9",
+      "timestamp": 1772067203938,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {
+        "os": "Windows"
+      }
+    },
+    {
+      "id": "mm2rf9wz0r86q4n71fy",
+      "timestamp": 1772067816179,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {
+        "os": "Windows"
+      }
+    },
+    {
+      "id": "mm2rp69sgmavdufhlao",
+      "timestamp": 1772068278016,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {
+        "os": "Windows"
+      }
+    },
+    {
+      "id": "mm2s6oci4oltjwrik8w",
+      "timestamp": 1772069094594,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {
+        "os": "Windows"
+      }
+    },
+    {
+      "id": "mm2s93ecg7pdswwkjtv",
+      "timestamp": 1772069207412,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {}
+    },
+    {
+      "id": "mm2s93elnq5mjgbkpo",
+      "timestamp": 1772069207421,
+      "path": "/",
+      "ip": "::1",
+      "deviceType": "Desktop",
+      "trafficSource": "Direct",
+      "geo": null,
+      "ua": {}
     }
-  ]
+  ],
+  "blockedIPs": [],
+  "blockedCountries": []
 }

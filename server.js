@@ -20,9 +20,31 @@ import { db, database } from './db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Enable dynamic MIME types for ESM modules
+express.static.mime.define({ 'application/javascript': ['mjs'] });
+
 const app = express();
 app.enable("trust proxy");
+
+// 1. Global CORS Middleware (Crucial for Discord Activities)
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    // Security headers for Discord
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+});
+
 app.use(express.json());
+
+// Log incoming requests for debugging
+app.use((req, res, next) => {
+    if (req.url === '/' || req.url === '/index.html') {
+        console.log(`[REQUEST] Serving index.html to ${req.ip} | User-Agent: ${req.get('user-agent')}`);
+    }
+    next();
+});
 
 // Health Check for Deployment Platforms
 app.get('/health', (req, res) => {
@@ -34,6 +56,7 @@ app.use(async (req, res, next) => {
     // 1. Firewall Check (IP & Geo-Blocking)
     const isAllowed = await analytics.checkAllowed(req);
     if (!isAllowed) {
+        console.warn(`[FIREWALL] Blocked request from ${req.ip} to ${req.url}`);
         return res.status(403).send('Access Denied: Restricted by Firewall/Region Block');
     }
 
@@ -880,7 +903,7 @@ io.on('connection', (socket) => {
     });
 
     // Discord Activity room coordination
-    socket.on('join_activity', (data) => {
+    socket.on('join_activity', async (data) => {
         try {
             const instanceId = data?.instanceId;
             if (!instanceId) {
@@ -927,7 +950,14 @@ io.on('connection', (socket) => {
                 existingPlayer.id = socket.id;
                 existingPlayer.connected = true;
                 existingPlayer.missedTurns = 0;
-                if (data?.name && data.name !== existingPlayer.name) {
+                if (data?.dbId) {
+                    try {
+                        const user = await db.getUser(data.dbId);
+                        if (user && user.display_name) {
+                            existingPlayer.name = user.display_name;
+                        }
+                    } catch (e) { }
+                } else if (data?.name && data.name !== existingPlayer.name) {
                     existingPlayer.name = data.name;
                 }
                 socket.join(roomCode);
@@ -941,6 +971,21 @@ io.on('connection', (socket) => {
 
             // New player
             let name = data?.name;
+
+            // Priority 1: Verified DB Name
+            const dbId = data?.dbId;
+            if (dbId) {
+                try {
+                    const user = await db.getUser(dbId);
+                    if (user && user.display_name) {
+                        name = user.display_name;
+                        console.log(`[Activity] Verified Discord Name for ${dbId}: ${name}`);
+                    }
+                } catch (e) {
+                    console.error("Activity Name Lookup Failed", e);
+                }
+            }
+
             if (!name) {
                 for (let i = 1; i <= 10; i++) {
                     let candidate = `Player ${i}`;
@@ -949,12 +994,15 @@ io.on('connection', (socket) => {
                         break;
                     }
                 }
-            } else {
-                let baseName = name;
-                let counter = 1;
-                while (game.players.some(p => p.name === name)) {
-                    name = `${baseName} (${++counter})`;
-                }
+            }
+
+            if (!name) name = `Player ${Math.floor(Math.random() * 9000) + 1000}`;
+
+            // Ensure uniqueness
+            let baseName = name;
+            let counter = 1;
+            while (game.players.some(p => p.name === name)) {
+                name = `${baseName} (${++counter})`;
             }
 
             if (game.players.length >= 10) {
@@ -981,7 +1029,7 @@ io.on('connection', (socket) => {
     });
 
     // Update player name after Discord auth completes
-    socket.on('update_name', (data) => {
+    socket.on('update_name', async (data) => {
         const newName = data?.name;
         const dbId = data?.dbId;
         if (!newName) return;
@@ -989,20 +1037,29 @@ io.on('connection', (socket) => {
         for (const game of games.values()) {
             const player = game.players.find(p => p.id === socket.id);
             if (player) {
-                if (player.name !== newName) {
-                    console.log(`[Name Update] ${player.name} → ${newName} in room ${game.roomCode}`);
-                    player.name = newName;
-                }
                 if (dbId && !player.dbId) {
                     player.dbId = dbId;
                 }
+
+                // If we have a DB ID, verify the name is actually correct
+                if (player.dbId) {
+                    try {
+                        const user = await db.getUser(player.dbId);
+                        if (user && user.display_name) {
+                            player.name = user.display_name;
+                        }
+                    } catch (e) { }
+                } else if (newName) {
+                    player.name = newName;
+                }
+
                 io.to(game.roomCode).emit('game_state_update', game.getState());
                 break;
             }
         }
     });
 
-    socket.on('join_game', (data) => {
+    socket.on('join_game', async (data) => {
         try {
             const requestedRoom = data?.roomCode;
             const isSpectator = data?.spectator === true;
@@ -1034,9 +1091,20 @@ io.on('connection', (socket) => {
                 existingPlayer.missedTurns = 0; // Reset AFK counter
 
                 // Update name if provided and likely fresher
-                if (data?.name && data.name !== existingPlayer.name) {
+                if (dbId) {
+                    try {
+                        const user = await db.getUser(dbId);
+                        if (user && user.display_name) {
+                            existingPlayer.name = user.display_name;
+                            console.log(`[Game ${roomCode}] Verified Reconnect Name for ${dbId}: ${existingPlayer.name}`);
+                        }
+                    } catch (e) {
+                        console.error("Reconnect Name Lookup Failed", e);
+                    }
+                } else if (data?.name && data.name !== existingPlayer.name) {
                     existingPlayer.name = data.name;
                 }
+
                 if (dbId && !existingPlayer.dbId) existingPlayer.dbId = dbId;
 
                 socket.join(roomCode);
@@ -1138,6 +1206,20 @@ io.on('connection', (socket) => {
             }
 
             let name = data?.name;
+
+            // Priority 1: If we have a DB ID, trust the database name over the client-sent name
+            if (dbId) {
+                try {
+                    const user = await db.getUser(dbId);
+                    if (user && user.display_name) {
+                        name = user.display_name;
+                        console.log(`[Game ${roomCode}] Verified Discord Name for ${dbId}: ${name}`);
+                    }
+                } catch (e) {
+                    console.error("DB Name Lookup Failed", e);
+                }
+            }
+
             if (!name) {
                 for (let i = 1; i <= 10; i++) {
                     let candidate = `Player ${i}`;
@@ -1146,13 +1228,15 @@ io.on('connection', (socket) => {
                         break;
                     }
                 }
-            } else {
-                // Ensure name is unique in this room
-                let baseName = name;
-                let counter = 1;
-                while (game.players.some(p => p.name === name)) {
-                    name = `${baseName} (${++counter})`;
-                }
+            }
+
+            if (!name) name = `Player ${Math.floor(Math.random() * 9000) + 1000}`;
+
+            // Ensure name is unique in this room (prevent duplicates)
+            let baseName = name;
+            let counter = 1;
+            while (game.players.some(p => p.name === name)) {
+                name = `${baseName} (${++counter})`;
             }
 
             if (game.players.length >= 10) {
@@ -1593,6 +1677,7 @@ setInterval(() => {
 }, 5000); // Check every 5s
 
 const PORT = process.env.PORT || 3000;
+console.log(`[SYSTEM] Attempting to listen on port ${PORT}...`);
 httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

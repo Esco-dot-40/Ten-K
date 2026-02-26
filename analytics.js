@@ -1,9 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { UAParser } = require('ua-parser-js');
+import { UAParser } from 'ua-parser-js';
 import fetch from 'node-fetch';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,7 +67,14 @@ export const analytics = {
     lookupGeo: async (ip) => {
         if (ip === '::1' || ip === '127.0.0.1') return null;
         try {
-            const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,query`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,proxy,query`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
             const data = await response.json();
             if (data.status === 'success') {
                 return {
@@ -85,7 +90,7 @@ export const analytics = {
                 };
             }
         } catch (e) {
-            // fallback logic removed for simplicity as requested
+            // Silently fail geo-lookup
         }
         return null;
     },
@@ -166,18 +171,50 @@ export const analytics = {
             const hits = analyticsData.hits.filter(h => !h.type);
             const last24h = hits.filter(h => now - h.timestamp < oneDay);
 
+            // Calculate aggregate stats
+            const browsers = {};
+            const os = {};
+            const deviceTypes = {};
+            const cities = {};
+            const mapData = [];
+
+            last24h.forEach(h => {
+                const bName = typeof h.ua?.browser === 'object' ? h.ua.browser.name : h.ua?.browser;
+                const oName = typeof h.ua?.os === 'object' ? h.ua.os.name : h.ua?.os;
+
+                if (bName) browsers[bName] = (browsers[bName] || 0) + 1;
+                if (oName) os[oName] = (os[oName] || 0) + 1;
+                deviceTypes[h.deviceType] = (deviceTypes[h.deviceType] || 0) + 1;
+
+                if (h.geo) {
+                    const loc = h.geo.city ? `${h.geo.city}, ${h.geo.countryCode}` : h.geo.country;
+                    if (loc) cities[loc] = (cities[loc] || 0) + 1;
+                    if (h.geo.ll) mapData.push(h.geo.ll);
+                }
+            });
+
+            // Count unique visitors by IP
+            const uniqueVisitors = new Set(hits.map(h => h.ip)).size;
+            const returningVisitors = hits.length - uniqueVisitors; // Naive approximation
+
             return {
                 totalHitsAllTime: hits.length,
                 hits24h: last24h.length,
                 activeUsers: activeSocketCount,
-                uniqueVisitors: new Set(last24h.map(h => h.ip)).size,
-                blockedIPs: analyticsData.blockedIPs.length,
+                uniqueVisitors: uniqueVisitors,
+                newVisitors: uniqueVisitors,
+                returningVisitors: returningVisitors,
                 blockedCountries: analyticsData.blockedCountries,
                 recent: analyticsData.hits.slice(-50).reverse(),
-                // Simplified timeline for charts
-                timeline: analytics.getTimeline(last24h)
+                timeline: analytics.getTimeline(last24h),
+                browsers,
+                os,
+                deviceTypes,
+                cities,
+                mapData
             };
         } catch (err) {
+            console.error("Analytics Stats Error", err);
             return { error: true, message: err.message };
         }
     },

@@ -26,34 +26,63 @@
     </script>
 </head>
 
-<body>
+<body style="background: #090910; color: white;">
     <div id="global-error-display" style="
         display: none; 
         position: fixed; 
-        top: 0; left: 0; right: 0; 
+        top: 0; left: 0; width: 100%; height: 100%; 
         background: #7f1d1d; 
         color: white; 
-        padding: 1rem; 
-        z-index: 9999; 
-        font-family: monospace; 
-        font-size: 12px;
-        white-space: pre-wrap;
-    "></div>
+        padding: 2rem; 
+        z-index: 999999; 
+        font-family: 'Outfit', sans-serif; 
+        overflow: auto;
+    ">
+        <h1 style="color: #ffcccc; margin-top: 0;">⚠️ Critical Initialization Error</h1>
+        <p>The application failed to start correctly. This usually happens if a library fails to load or there is a
+            configuration error.</p>
+        <pre id="error-log-content"
+            style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; white-space: pre-wrap; word-break: break-all; margin-bottom: 2rem;"></pre>
+        <button onclick="location.reload()"
+            style="background: white; color: #7f1d1d; border: none; padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1.1rem;">🔄
+            Retry Loading</button>
+    </div>
     <script>
-        window.onerror = function (msg, url, line, col, error) {
+        (function () {
             const el = document.getElementById('global-error-display');
-            if (el) {
-                el.style.display = 'block';
-                el.textContent += `Error: ${msg}\nAt: ${url}:${line}:${col}\n\n`;
+            const content = document.getElementById('error-log-content');
+
+            function logError(msg, details = "") {
+                console.error("[BOOTSTRAP ERROR]", msg, details);
+                if (el && content) {
+                    el.style.display = 'block';
+                    content.textContent += `${new Date().toLocaleTimeString()} - ${msg}\n${details}\n\n`;
+                }
             }
-        };
-        window.addEventListener('unhandledrejection', function (event) {
-            const el = document.getElementById('global-error-display');
-            if (el) {
-                el.style.display = 'block';
-                el.textContent += `Promise Rejection: ${event.reason}\n\n`;
+
+            // Immediately log that we are starting
+            console.log("Bootstrap initialized. Monitoring for errors...");
+
+            window.onerror = function (msg, url, line, col, error) {
+                logError(`CODE ERROR: ${msg}`, `Source: ${url}:${line}:${col}\nStack: ${error?.stack || 'N/A'}`);
+            };
+
+            window.addEventListener('unhandledrejection', function (event) {
+                logError(`PROMISE REJECTION: ${event.reason}`);
+            });
+
+            window.addEventListener('error', function (event) {
+                if (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK') {
+                    const src = event.target.src || event.target.href;
+                    logError(`RESOURCE FAILED: ${event.target.tagName}`, `Path: ${src}`);
+                }
+            }, true);
+
+            // Check for importmap support
+            if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('importmap')) {
+                logError("UNSUPPORTED BROWSER", "This environment does not support importmaps. Please update your Discord client.");
             }
-        });
+        })();
     </script>
 
     <div id="app">

@@ -4,6 +4,8 @@ import * as CANNON from "cannon-es";
 import gsap from "gsap";
 import { calculateScore, isScoringSelection } from "./rules.js";
 
+console.log("[CLIENT] Script Execution Start");
+
 
 
 
@@ -24,10 +26,7 @@ class FarkleClient {
         } catch (e) {
             // Silently fail
         }
-        window.onerror = (msg, url, line) => {
-            this.debugLog(`JS Error: ${msg} at ${line}`);
-            return false;
-        };
+
 
         try {
             this.roomCode = null;
@@ -225,7 +224,9 @@ class FarkleClient {
             }
 
             this.debugLog("Initializing Discord SDK...");
-            this.discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
+            this.discordSdk = new DiscordSDK({
+                clientId: DISCORD_CLIENT_ID,
+            });
 
             // 1. Check for existing local session
             const savedToken = localStorage.getItem('farkle_auth_token');
@@ -1037,6 +1038,9 @@ class FarkleClient {
 
             this.renderControls();
 
+            // FORCE VISIBILITY FOR LATE JOINERS
+            gsap.set([".player-zones", ".dice-arena", ".controls"], { opacity: 1, visibility: 'visible', scale: 1, y: 0, display: '' });
+
             // Update UI
             if (this.ui.roomDisplay) this.ui.roomDisplay.textContent = `Table: ${this.roomCode}`;
             this.addDebugMessage(`🎮 Session Active: ${this.roomCode}`);
@@ -1494,11 +1498,17 @@ class FarkleClient {
 
         // --- STABILITY: Ensure items are actually revealed ---
         const reveal = () => {
-            gsap.set([".player-zones", ".dice-arena", ".controls"], { opacity: 1, visibility: 'visible', scale: 1, y: 0 });
+            gsap.set([".player-zones", ".dice-arena", ".controls"], {
+                opacity: 1,
+                visibility: 'visible',
+                scale: 1,
+                y: 0,
+                display: ''
+            });
         };
         if (!this.revealDone) {
-            setTimeout(reveal, 2000); // Fail-safe reveal
             this.revealDone = true;
+            setTimeout(reveal, 500); // Fail-safe reveal (faster)
         }
 
         if (this.gameState.gameStatus === 'playing') {
