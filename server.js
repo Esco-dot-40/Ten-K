@@ -1009,6 +1009,20 @@ io.on('connection', (socket) => {
             }
 
             socket.playerName = name;
+
+            // 🏅 PERSISTENCE: Pre-fill guest users in DB for leaderboards
+            const persistenceId = data?.dbId || data?.reconnectToken;
+            if (persistenceId && !data?.dbId) {
+                try {
+                    await db.upsertUser({
+                        id: persistenceId,
+                        username: name,
+                        global_name: name,
+                        avatar: null
+                    });
+                } catch (dbErr) { }
+            }
+
             game.addPlayer(socket.id, name, data?.reconnectToken, data?.dbId);
             socket.join(roomCode);
             socket.emit('activity_room', { roomCode });
@@ -1245,28 +1259,30 @@ io.on('connection', (socket) => {
             socket.playerName = name;
 
             // 🏅 PERSISTENCE: Use Discord ID if available, fallback to reconnectToken for guests
-            dbId = data?.dbId || data?.reconnectToken;
-            if (dbId) {
+            const persistenceId = data?.dbId || data?.reconnectToken;
+
+            // Only pre-fill user in DB if it's a guest (to allow them on leaderboard)
+            // If they have a data.dbId, they are a Discord user and already upserted via /api/token
+            if (persistenceId && !data?.dbId) {
                 try {
-                    // Pre-fill user in DB so they show up on leaderboards
                     await db.upsertUser({
-                        id: dbId,
+                        id: persistenceId,
                         username: baseName,
                         global_name: baseName,
                         avatar: null
                     });
                 } catch (dbErr) {
-                    console.warn(`[Game ${roomCode}] DB Background Upsert Failed:`, dbErr.message);
+                    console.warn(`[Game ${roomCode}] DB Guest Upsert Failed:`, dbErr.message);
                 }
             }
 
-            game.addPlayer(socket.id, name, data?.reconnectToken, dbId);
+            game.addPlayer(socket.id, name, data?.reconnectToken, persistenceId);
 
             // Sync Avatar from DB
             const p = game.players.find(p => p.id === socket.id);
-            if (p && dbId) {
+            if (p && persistenceId) {
                 try {
-                    const user = await db.getUser(dbId);
+                    const user = await db.getUser(persistenceId);
                     if (user && user.avatar) {
                         p.avatar = user.avatar;
                     }
